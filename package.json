@@ -1,0 +1,46 @@
+{
+  "name": "qa-issue-tracker",
+  "version": "0.7.3",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "setup": "tsx prisma/seed-init.ts",
+    "start": "next start",
+    "lint": "eslint",
+    "db:reset": "prisma migrate reset --force",
+    "user": "tsx scripts/user.ts",
+    "backup": "bash scripts/backup.sh",
+    "restore": "bash scripts/restore.sh",
+    "demo": "bash scripts/demo.sh",
+    "deploy": "bash scripts/deploy.sh",
+    "serve": "bash scripts/serve.sh"
+  },
+  "dependencies": {
+    "@prisma/adapter-mariadb": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "bcryptjs": "^3.0.3",
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.1",
+    "playwright": "^1.62.1",
+    "prisma": "^7.9.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}

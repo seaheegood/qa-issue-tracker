@@ -1,0 +1,3833 @@
+/* ════════════════════════════════════════════════════════════
+   IssueTracker — 디자인 시스템
+
+   메인 컬러: 틸 #0D9488
+   화면을 예쁘게 만드는 게 목적이 아니라, 하루 77건을 다루는 사람이
+   눈으로 훑어서 바로 읽히게 만드는 게 목적이다.
+
+   색 원칙
+     · 틸은 '지금 어디에 있는가'에만 쓴다 (선택된 메뉴, 포커스, 링크)
+     · 상태·우선순위 색은 DB에서 오므로 틸과 겹치지 않게 둔다
+     · 라이트 테마도 순백을 쓰지 않는다. 청록기가 아주 옅게 깔린 회색을 쓴다
+   ════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  --accent: #0d9488;
+  /* ★ **글자와 버튼 배경은 이걸 쓴다** (C-48 · 2026-09-11).
+     브랜드 색 `--accent` 는 흰 바탕에 **3.74** 라 AA(4.5) 미달이고,
+     `.btn-primary` 의 흰 글자도 같은 3.74 였다. 그렇다고 브랜드 색을 통째로
+     어둡게 하면 로고·점·토글까지 다 바뀌므로 **쓰임을 나눈다** —
+     채움(로고·점·토글·포커스 링)은 `--accent`, 글자는 `--accent-text`. */
+  --accent-text: #115e59;     /* 7.58 — 글자·버튼 배경도 AAA */     /* 흰 바탕 5.47 · 흰 글자를 얹어도 5.47 */
+  --accent-hover: #0f766e;
+  --accent-fg: #ffffff;
+  --accent-soft: #0d948814;
+  --accent-line: #0d948833;
+
+  /* 순백(#fff)이 아니라 청록기가 도는 아주 옅은 회색 */
+  --bg: #fbfcfc;
+  --bg-sunken: #f1f5f4;
+  /* ★ 상태 그룹 머리 전용 (2026-09-16 제보 — *"좀더 진한색으로 해서 구분감있게"*).
+     `--bg-sunken`(#f1f5f4)은 줄 배경(#fbfcfc)과 거의 같아 **띠로 안 읽혔다.** */
+  --bg-group: #e2ebe8;
+  --surface: #ffffff;
+  --surface-hover: #eef3f2;
+  --sidebar-bg: #f4f7f6;
+  /* ★ 사이드바 전용 호버.
+     --surface-hover(#eef3f2) 는 **흰 바탕** 기준으로 잡은 값이라, 사이드바
+     바탕(#f4f7f6) 위에서는 차이가 6/4/4 밖에 안 나 사실상 안 보였다.
+     바탕이 다르면 호버색도 달라야 한다. */
+  --sidebar-hover: #e5ecea;
+  --border: #d4dedb;
+  --border-strong: #6f7d7a;   /* 4.29 — 입력칸 경계가 눈에 들어오게 */   /* 입력칸 테두리 3.11 — WCAG 1.4.11 이 UI 경계에 3:1 을 요구한다 */
+
+  --text: #16201e;
+  --text-dim: #2f3a38;        /* 흰 바탕 11.78 — AAA(7:1) 를 넘긴다 */        /* 흰 바탕 7.20 (예전 #5f6d6a = 5.41) */
+  --text-faint: #475350;      /* 흰 바탕 8.01 · 가라앉은 바탕 7.29 — 보조 글자도 AAA */      /* ★ 흰 바탕 5.10 · 가라앉은 바탕 4.64 — 예전 #94a3a0 은 **2.62** 로 AA 미달이었다 */
+
+  --shadow-lg: 0 4px 24px rgb(13 40 36 / 0.12);
+
+  --r-sm: 5px;
+  --r: 7px;
+
+  --row-h: 44px;
+  /* 목록이 넓어지다 멈추는 곳 (2026-09-11) */
+  /* ★★ **상한을 없앴다** (2026-09-16 사용자 지시 — *"좌우에 여백 안생기게해줘
+     최대한 화면을 다 활용할 수 있게"*). `100%` 면 아래 `--gutter` 가 0 이 된다.
+     장치는 남겨 둔다 — 다시 상한을 걸고 싶으면 **이 한 줄**만 바꾸면 된다.
+
+     ⚠️ 2026-09-12 에 같은 요청으로 같은 일을 했다가 롤백됐다(`152dbb3`→`f6b23a8`).
+       그때 문제는 상한이 아니라 **같이 넣은 "칸을 flex 로 늘린다"** 였다 —
+       flex 는 줄 단위로 계산돼 제목이 긴 줄만 박스가 좁아졌다 (`I-70-1`).
+       그래서 이번엔 **이 줄만** 바꾼다. 칸 폭은 서버가 정한 고정값 그대로고,
+       남는 폭은 제목(`flex:1`)만 가져간다. */
+  --w-list: 100%;
+  --h-topbar: 46px;
+  --h-toolbar: 44px;
+  --w-sidebar: 216px;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* 드롭다운 화살표. 앱의 다른 아이콘과 같은 규격(선 굵기 2, 둥근 끝)으로 그린다.
+     ⚠️ 배경 이미지 안에서는 `currentColor` 가 안 먹는다 — 색을 **박아** 넣어야 해서
+       테마마다 한 벌씩 둔다. 아래 :root[data-theme="dark"] 에 짝이 있다. */
+
+  /* ── 글자 크기 ─────────────────────────────────────────────
+     ★ **다섯 단계뿐이다.** 예전엔 9~31px 사이에 값이 **17종**이 흩어져 있었고,
+       그중 11.5 · 12 · 12.5px 세 값이 **163곳(63%)** 을 차지했다. 같은 성격의
+       글자가 화면마다 다른 크기였다는 뜻이다 (FB-005 때도 같은 병을 겪었다).
+
+     ★ **크기를 바꾸려면 여기 다섯 줄만 고친다.** 되돌리기도 다섯 숫자다.
+
+     ⚠️ 옛 이름(`--fs-11-5` …)은 **호출부를 안 건드리려고 남겨 둔 다리**다.
+       아래에서 새 단계로 잇는다. 다음 단계에서 호출부를 새 이름으로 바꾸고 지운다. */
+
+  --fs-xs: 11.5px;   /* 미세 — 배지 숫자, 각주, 이니셜        (구 9 · 9.5 · 10 · 10.5) */
+  --fs-sm: 12.5px;   /* 보조 — 라벨, 드롭다운 머리글          (구 11) */
+  --fs-md: 13.5px;   /* 표준 — 목록 메타 · pill · 칩 · 버튼   (구 11.5 · 12 · 12.5) */
+  --fs-lg: 15px;     /* 본문 · 목록 제목                      (구 13 · 13.5) */
+  --fs-xl: 16.5px;   /* 화면 제목                             (구 14 · 15) */
+
+  /* 표시용 — 개수가 적어 단계로 묶지 않는다 */
+  --fs-d1: 18.5px;   /* 구 16  ⚠️ 18.66px 을 일부러 안 넘긴다 — 넘으면 WCAG 가
+                              '큰 글자'로 쳐서 대비 기준이 4.5 → 3 으로 **느슨해진다** */
+  --fs-d2: 22.5px;   /* 구 19 · 20 */
+  --fs-d3: 25px;     /* 구 22 */
+  --fs-d4: 34px;     /* 구 31 — 로그인 로고 */
+
+  /* ── 옛 이름 → 새 단계 (A단계의 다리) ── */
+  --fs-9:    var(--fs-xs);
+  --fs-9-5:  var(--fs-xs);
+  --fs-10:   var(--fs-xs);
+  --fs-10-5: var(--fs-xs);
+  --fs-11:   var(--fs-sm);
+  --fs-11-5: var(--fs-md);
+  --fs-12:   var(--fs-md);
+  --fs-12-5: var(--fs-md);
+  --fs-13:   var(--fs-lg);
+  --fs-13-5: var(--fs-lg);
+  --fs-14:   var(--fs-xl);
+  --fs-15:   var(--fs-xl);
+  --fs-16:   var(--fs-d1);
+  --fs-19:   var(--fs-d2);
+  --fs-20:   var(--fs-d2);
+  --fs-22:   var(--fs-d3);
+  --fs-31:   var(--fs-d4);
+
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f3a38' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --accent: #2dd4bf;
+  --accent-text: #2dd4bf;     /* 어두운 바탕 9.39 — 다크는 브랜드 색 그대로도 충분하다 */
+  --accent-hover: #5eead4;
+  --accent-fg: #06201d;
+  --accent-soft: #2dd4bf1a;
+  --accent-line: #2dd4bf3d;
+
+  --bg: #0d1211;
+  --bg-sunken: #0a0f0e;
+  /* 다크는 반대로 **밝은 쪽**이 튀어나온다. 가라앉히면 줄과 구분이 안 된다 */
+  --bg-group: #1b2523;
+  --surface: #141b1a;
+  --surface-hover: #1a2322;
+  --sidebar-bg: #090d0d;
+  --sidebar-hover: #182120;
+  --border: #202b29;
+  --border-strong: #6e817d;   /* 4.24 */   /* 3.18 */
+
+  --text: #e6eceb;
+  --text-dim: #cfdcd9;        /* 12.40 */        /* 어두운 바탕 7.52 */
+  --text-faint: #a7b5b2;      /* 8.24 */      /* ★ 4.93 — 예전 #5f6f6c 은 3.31 로 AA 미달 */
+
+  --shadow-lg: 0 8px 32px rgb(0 0 0 / 0.55);
+
+  /* 어두운 바탕에서 #5f6d6a 는 거의 안 보인다 — 밝은 쪽 --text-dim 으로 다시 그린다 */
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cfdcd9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    Pretendard, "Malgun Gothic", sans-serif;
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 한글은 어절 단위로 끊어야 읽힌다.
+   기본값(break-word)이면 '안정화 시 / 점입니다' 처럼 낱말 가운데가 갈라진다.
+   영문·코드가 섞인 곳은 overflow-wrap 이 받아준다. */
+:where(p, li, dd, dt, td, th, span, h1, h2, h3, label, legend, summary) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* ════ 스크롤바 ════════════════════════════════════════════
+   ★ color-scheme 이 없으면 브라우저는 **항상 라이트 스크롤바**를 그린다.
+   테마 변수만 바꿔서는 스크롤바가 안 따라온다 — 네이티브 위젯이라
+   CSS 변수가 아니라 color-scheme 을 본다. 그래서 다크 테마인데도
+   사이드바(#090d0d)와 본문 오른쪽에 **흰 막대**가 그대로 남아 있었다.
+   (:root 에서 한 번만 선언한다. scrollbar-width/color 는 상속되므로
+    .sidebar · .main · 모달 등 모든 스크롤 영역에 그대로 내려간다.) */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* 크롬 121 미만 대비. 표준 속성을 지원하면 그쪽이 이긴다. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; letter-spacing: inherit; }
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* ════ 앱 셸 ═══════════════════════════════════════════════
+   .main 이 스크롤 컨테이너다. 사이드바는 안 움직인다.
+   sticky 요소들은 .main 의 스크롤 기준으로 붙는다. */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--w-sidebar) minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+/* ★ `position: relative` 가 **스크롤이 두 개로 보이던 원인**이었다 (2026-09-11 제보).
+   `.sr`(스크린리더 전용 글자)은 `position: absolute` 인데 **기준이 될 부모가 없어서**
+   body 기준으로 잡혔다. 그러면 `.app { overflow: hidden }` 이 그것을 **못 자른다** —
+   잘라주는 건 '조상'이 아니라 '기준 상자'이기 때문이다.
+   대시보드는 사람별 막대마다 `.sr` 을 넣어서 그것들이 문서를 세로로 늘렸고,
+   **창 스크롤 + .main 스크롤** 두 개가 생겼다. 내리면 아래가 빈 이유도 이것이다.
+   여기에 기준을 하나 주면 전부 `.main` 안에서 잘린다. */
+.main { position: relative; overflow-y: auto; overflow-x: hidden; }
+
+@media (max-width: 760px) {
+  /* ★ 1fr 이 아니라 minmax(0, 1fr) 이어야 한다.
+     그리드 트랙의 기본 최소 크기는 auto 라, 안쪽 콘텐츠가 넓으면 트랙이 그만큼 늘어난다.
+     그러면 화면 전체가 가로로 밀려서 스크롤이 생긴다 (390px 에서 4,045px 넘쳤다).
+     데스크톱 쪽(93행)은 처음부터 minmax(0, 1fr) 이라 이 문제가 없었다. */
+  .app { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
+  .main { overflow: visible; height: auto; }
+  /* .sidebar 는 여기서 숨길 수 없다 — 정의가 아래(사이드바 절)에 있어서 이 규칙이 진다.
+     아래쪽 '좁은 화면' 블록에서 숨긴다. */
+}
+
+/* ════ 사이드바 ════════════════════════════════════════════ */
+
+.sidebar {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+/* ★ 아래 여백을 padding 으로 주고 있었다 (위 4 · 아래 10).
+   그래서 호버 사각형이 **아래로 3px 치우쳐** 그려졌다 — 링크는 가운데 있는데
+   강조는 아래에 있으니 눌리는 자리가 어긋나 보인다. 여백은 margin 으로 뺀다.
+   왼쪽 안쪽 여백 9px 은 아래 프로젝트 전환(테두리 1 + 패딩 8)과 맞춘 값이다 —
+   로고와 프로젝트 배지가 같은 세로선에 선다. */
+/* 로고 줄 = 로고 + 접기 버튼. 버튼이 로고와 같은 줄에 있어야
+   접힌 뒤에도 **같은 자리에서** 다시 펼 수 있다. */
+.sb-head { display: flex; align-items: center; gap: 2px; }
+.sb-head .sb-brand { flex: 1; min-width: 0; }
+/* 좁은 화면에서는 사이드바가 이미 서랍이라 접기가 의미 없다 —
+   기본을 숨김으로 두고 넓은 화면에서만 켠다(아래 '사이드바 접기' 절).
+   그래야 모바일 서랍 쪽 규칙을 건드리지 않는다. */
+/* ⚠️ `.sb-head` 를 앞에 붙여 특정도를 올린다. `.sb-toggle` 만으로는 뒤에 오는
+   `.iconbtn { display: inline-flex }` 와 같은 무게라 **나중에 나온 쪽이 이겨서**
+   좁은 화면에서도 버튼이 보였다. */
+.sb-head .sb-toggle { display: none; flex: none; }
+
+.sb-brand {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 9px; margin-bottom: 4px;
+}
+.logo {
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  flex: none;
+  background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #3b82c4));
+}
+.sb-brand .name { font-weight: 600; font-size: var(--fs-13-5); letter-spacing: -0.018em; }
+
+/* 프로젝트 선택 */
+.proj { position: relative; margin-bottom: 10px; }
+.proj > summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-12-5); font-weight: 500;
+}
+.proj > summary::-webkit-details-marker { display: none; }
+.proj > summary:hover { border-color: var(--border-strong); }
+.proj .pkey {
+  font-family: var(--mono); font-size: var(--fs-10); font-weight: 700;
+  color: var(--accent-fg); background: var(--accent-text);
+  border-radius: 3px; padding: 1px 4px; flex: none;
+}
+.proj .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj .pcaret { color: var(--text-faint); display: flex; flex: none; }
+
+.proj-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  padding: 4px; z-index: 60;
+}
+.proj-menu .item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; border-radius: var(--r-sm); font-size: var(--fs-12-5);
+}
+.proj-menu .item.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.proj-menu .item.dim { color: var(--text-faint); cursor: default; }
+.proj-menu .sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+/* 내비 */
+.sb-label {
+  font-size: var(--fs-10-5); font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-faint);
+  padding: 10px 8px 4px;
+}
+.nav {
+  display: flex; align-items: center; gap: 9px;
+  height: 30px; padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-13);
+}
+.nav:hover { background: var(--sidebar-hover); color: var(--text); }
+.nav .ico { display: flex; flex: none; opacity: 0.8; }
+.nav .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav .cnt { font-size: var(--fs-11-5); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.nav.on {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.nav.on .ico { opacity: 1; }
+.nav.on .cnt { color: var(--accent-text); }
+
+.nav.off { color: var(--text-faint); cursor: default; }
+.nav.off:hover { background: transparent; color: var(--text-faint); }
+.soon {
+  font-size: var(--fs-10); color: var(--text-faint);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 0 4px; white-space: nowrap;
+}
+
+/* ★ **하단은 바닥에 붙어 있어야 한다** (2026-09-11).
+   `margin-top: auto` 는 내용이 넘치지 **않을 때만** 바닥으로 민다. 글자를 키우니
+   사이드바가 넘쳤고, 그 순간 계정·로그아웃이 스크롤 아래로 사라졌다.
+   (프로젝트·상태가 늘어나도 똑같이 깨질 자리였다 — 글자가 드러냈을 뿐이다) */
+.sb-foot {
+  margin-top: auto; padding-top: 10px;
+  position: sticky; bottom: -10px;
+  background: var(--sidebar-bg);
+}
+
+/* 로그인한 사람 */
+.sb-user {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 6px 2px; margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.sb-user .u { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.3; }
+.sb-user .un { font-size: var(--fs-12-5); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-user .ur { font-size: var(--fs-10-5); color: var(--text-faint); }
+.sb-user form { display: flex; }
+
+/* ── 사이드바 접기 (넓은 화면 전용) ─────────────────────────
+   ★ **폭은 CSS 가 정한다.** `<html data-sidebar="0">` 하나만 보고
+     `--w-sidebar` 를 바꾸면 `.app` 그리드가 따라 줄어든다 —
+     자바스크립트가 px 을 계산해 넣지 않는다 (`SidebarToggle.tsx`).
+
+   ★ **왜 미디어쿼리로 감쌌나.** 접힘 상태는 `<html>` 에 붙어 있어서
+     좁은 화면에도 그대로 따라온다. 감싸지 않으면 데스크톱에서 접어 둔 사람이
+     폰으로 열었을 때 **서랍 안 메뉴가 전부 아이콘만** 남는다.
+     서랍은 이미 접힌 것의 반대편이라 여기서 다시 접을 이유가 없다. */
+@media (min-width: 761px) {
+  .sb-head .sb-toggle { display: inline-flex; }
+
+  :root[data-sidebar="0"] { --w-sidebar: 56px; }
+
+  /* 글자를 전부 숨긴다. 이름은 `title` 로 뜬다(마우스를 올리면) */
+  :root[data-sidebar="0"] .sidebar .n,
+  :root[data-sidebar="0"] .sidebar .cnt,
+  :root[data-sidebar="0"] .sidebar .soon,
+  :root[data-sidebar="0"] .sidebar .sb-brand .name,
+  :root[data-sidebar="0"] .sidebar .proj .pname,
+  :root[data-sidebar="0"] .sidebar .proj .pcaret,
+  :root[data-sidebar="0"] .sidebar .sb-user .u,
+  /* 상태·차수 하위 목록은 **통째로** 숨긴다. 점만 남기면 무엇을 누르는지 알 수 없다 */
+  :root[data-sidebar="0"] .sidebar .subnav,
+  /* 그 목록을 여는 삼각형도 같이 — 열어도 나올 것이 없다 */
+  :root[data-sidebar="0"] .sidebar .twisty { display: none; }
+
+  :root[data-sidebar="0"] .sidebar { padding-left: 6px; padding-right: 6px; }
+  :root[data-sidebar="0"] .sidebar .nav,
+  :root[data-sidebar="0"] .sidebar .navmain { justify-content: center; gap: 0; padding: 0; }
+  :root[data-sidebar="0"] .sidebar .sb-head { flex-direction: column; gap: 0; }
+  :root[data-sidebar="0"] .sidebar .sb-brand { justify-content: center; padding: 6px; }
+  :root[data-sidebar="0"] .sidebar .proj > summary { justify-content: center; padding: 6px 4px; }
+  /* 메뉴는 좁아진 사이드바 밖으로 펼친다. left/right 를 그대로 두면 44px 짜리
+     메뉴가 되어 프로젝트 이름이 한 글자씩 끊긴다. */
+  :root[data-sidebar="0"] .sidebar .proj-menu { right: auto; width: 200px; }
+  :root[data-sidebar="0"] .sidebar .sb-user {
+    flex-direction: column; gap: 6px; padding: 8px 0 2px;
+  }
+}
+
+/* ════ 로그인 화면 ═════════════════════════════════════════ */
+
+.login-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(900px 460px at 50% -8%, var(--accent-soft), transparent 70%),
+    var(--bg);
+}
+.login-theme { position: fixed; top: 14px; right: 14px; }
+
+.login-card {
+  width: 100%; max-width: 348px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 26px 22px;
+  box-shadow: var(--shadow-lg);
+}
+.login-brand {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: var(--fs-13-5); letter-spacing: -0.018em;
+  color: var(--text-dim); margin-bottom: 20px;
+}
+.login-card h1 { margin: 0 0 2px; font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.02em; }
+.login-sub { margin: 0 0 22px; font-size: var(--fs-12-5); color: var(--text-faint); }
+
+.login-form { display: flex; flex-direction: column; gap: 13px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: var(--fs-12); color: var(--text-dim); font-weight: 500; }
+/* ★ `input` 만 쓰면 **체크박스까지** 높이 36px 짜리 텍스트 칸이 된다.
+   실제로 등록 화면의 플랫폼 체크박스가 13×36 으로 늘어나 있었다. */
+.field input:not([type="checkbox"]):not([type="radio"]) {
+  height: 36px; padding: 0 11px;
+  font: inherit; color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  outline: none;
+}
+.field input:not([type="checkbox"]):not([type="radio"]):focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.login-form button[type="submit"] {
+  height: 37px; margin-top: 4px;
+  border: none; border-radius: var(--r);
+  background: var(--accent-text); color: var(--accent-fg);
+  font-weight: 600; font-size: var(--fs-13-5); cursor: pointer;
+}
+.login-form button[type="submit"]:hover:not(:disabled) { background: var(--accent-hover); }
+.login-form button[type="submit"]:disabled { opacity: 0.7; cursor: default; }
+
+.login-error {
+  margin: 0; padding: 8px 10px;
+  font-size: var(--fs-12-5); color: #dc2626;
+  background: #dc26260f; border: 1px solid #dc262633;
+  border-radius: var(--r);
+}
+:root[data-theme="dark"] .login-error { color: #fca5a5; }
+
+.login-foot {
+  margin: 20px 0 0; padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-11-5); color: var(--text-faint); line-height: 1.65;
+}
+.login-foot b { color: var(--text-dim); }
+
+/* ════ 안내 화면 (404 · 오류) ═══════════════════════════════
+   ★ 로그인 화면과 **같은 판**을 쓴다. 여기까지 온 사람은 이미 뭔가 어긋난 참인데
+     화면 생김새까지 낯설면 "이 사이트가 맞나" 부터 의심하게 된다.
+     사이드바를 안 그리는 이유는 not-found.tsx 주석 참조. */
+
+.msg-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(900px 460px at 50% -8%, var(--accent-soft), transparent 70%),
+    var(--bg);
+}
+.msg-card {
+  width: 100%; max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 26px 24px;
+  box-shadow: var(--shadow-lg);
+}
+.msg-brand {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: var(--fs-13-5); letter-spacing: -0.018em;
+  color: var(--text-dim); margin-bottom: 22px;
+}
+.msg-code {
+  margin: 0 0 6px;
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--accent-text);
+}
+.msg-code-bad { color: #b45309; }
+:root[data-theme="dark"] .msg-code-bad { color: #fbbf24; }
+
+.msg-card h1 {
+  margin: 0 0 10px;
+  font-size: var(--fs-19); font-weight: 600; letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+.msg-sub { margin: 0; font-size: var(--fs-13); color: var(--text-dim); line-height: 1.7; }
+.msg-sub b { color: var(--text); font-weight: 600; }
+
+.msg-hints {
+  margin: 16px 0 0; padding: 0 0 0 16px;
+  font-size: var(--fs-12); color: var(--text-faint); line-height: 1.75;
+}
+.msg-hints b { color: var(--text-dim); font-weight: 500; }
+
+.msg-digest {
+  margin: 14px 0 0; padding: 8px 10px;
+  font: 400 11.5px/1.4 var(--mono);
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  word-break: break-all;
+}
+
+.msg-actions {
+  margin: 22px 0 0; padding-top: 18px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+/* ★ `.btn-primary` 는 <button> 기준(height 32)이고 `.btn-ghost` 는 27 이다.
+   나란히 두면 밑선이 어긋난다 — 여기서만 키를 맞춘다.
+   Link 는 <a> 라 display 를 안 주면 글자가 위로 붙는다. */
+.msg-actions .btn-primary,
+.msg-actions .btn-ghost {
+  display: inline-flex; align-items: center;
+  height: 32px; align-self: auto;
+  text-decoration: none;
+}
+
+/* ════ 상단바 ══════════════════════════════════════════════ */
+
+.topbar {
+  height: var(--h-topbar);
+  padding: 0 14px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky; top: 0; z-index: 40;
+}
+.page-title { font-weight: 600; font-size: var(--fs-14); letter-spacing: -0.015em; }
+.page-sub { color: var(--text); font-size: var(--fs-12-5); font-weight: 600; font-family: var(--mono); }
+.spacer { flex: 1; }
+.iconbtn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); border: 1px solid transparent;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.iconbtn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ★ 테마 토글의 아이콘은 **CSS 가 고른다** (C-12 · 2026-09-04).
+   버튼이 테마를 React 상태로 들고 있지 않다 — 원본은 `<html data-theme>` 하나뿐이고,
+   여기서 그걸 직접 읽는다. 상태로 복사하면 두 곳이 갈라지고, 서버는 그 값을 몰라
+   첫 렌더가 반드시 어긋난다 (그걸 effect 로 메우고 있었다).
+
+   기본(속성이 아직 안 붙은 찰나)은 달을 숨긴다 — themeInitScript 가 화면이 그려지기
+   전에 속성을 붙이므로(C-13) 실제로는 보이지 않는다. */
+.theme-btn .ico-moon { display: none; }
+.theme-btn .ico-sun { display: block; }
+:root[data-theme="light"] .theme-btn .ico-sun { display: none; }
+:root[data-theme="light"] .theme-btn .ico-moon { display: block; }
+
+/* ════ 검색 ════════════════════════════════════════════════ */
+
+.searchwrap { position: relative; width: 280px; }
+.searchwrap input {
+  width: 100%; height: 28px;
+  padding: 0 54px 0 29px;
+  font: inherit; color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  outline: none;
+}
+.searchwrap input::placeholder { color: var(--text-faint); }
+.searchwrap input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.searchwrap .si {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--text-faint); pointer-events: none; display: flex;
+}
+.kbd {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  font-family: var(--mono); font-size: var(--fs-10-5); color: var(--text-faint);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; pointer-events: none;
+}
+
+/* ════ 설정 탭 줄 ══════════════════════════════════════════
+   ★★ **목록 툴바(`.toolbar`)와 분리했다** (2026-09-16).
+     설정 화면 두 곳이 목록과 **같은 클래스**를 쓰고 있었는데, 목록 툴바를
+     두 줄(`flex-direction: column`)로 바꾸는 순간 **설정 탭이 세로로 무너졌다.**
+     한 클래스를 두 화면이 나눠 쓰면 한쪽을 고칠 때마다 다른 쪽이 따라 망가진다.
+
+   ⚠️ 여기는 앞으로도 **한 줄**이다. 목록 툴바가 어떻게 바뀌든 상관없다. */
+.tabbar {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+  padding: 5px calc(var(--gutter) + 14px);
+  min-height: var(--h-toolbar);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky; top: var(--h-topbar); z-index: 30;
+}
+
+/* ════ 툴바 / 필터 ═════════════════════════════════════════ */
+
+.toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px calc(var(--gutter) + 14px);
+  border-bottom: 1px solid var(--border);
+  /* ★ **감싼다.** 예전에는 `nowrap` + 고정 높이였다 — 아래 그룹 머리의 sticky
+     위치를 맞추려고. 그런데 필터가 네 개만 돼도 `모두 지우기` 가 세로로 쪼개지고
+     **엑셀 · 저장된 필터 · 일괄 · 새 이슈가 통째로 잘렸다.**
+     이제 높이는 ToolbarHeight 가 재서 `--toolbar-h` 로 알려준다.
+
+     overflow 는 여전히 쓰지 않는다 — overflow-x:auto 를 주면 브라우저가
+     overflow-y 도 같이 잘라서 드롭다운 메뉴가 안 보인다. */
+  /* ★★ **두 줄이다** (2026-09-16). 겉껍데기는 그대로 두고 안에서 나눈다 —
+     `ToolbarHeight` 가 **이 요소**의 높이를 재서 머리줄의 sticky 위치를 잡는다. */
+  flex-direction: column; align-items: stretch; gap: 0;
+  padding: 0;
+  min-height: var(--h-toolbar);
+  background: var(--bg);
+  position: sticky; top: var(--h-topbar); z-index: 30;
+  border-bottom: 0;
+}
+/* 윗줄 — **건수는 맨 왼쪽, 나머지는 오른쪽 끝**.
+   `margin-right:auto` 하나로 가른다. 가운데에 빈 `<span>` 을 끼우지 않는다 —
+   줄바꿈이 일어나면 그 빈 칸이 한 줄을 통째로 먹는다. */
+.tb-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px calc(var(--gutter) + 14px);
+}
+.tb-count {
+  margin-right: auto;
+  color: var(--text-dim); font-size: var(--fs-12-5);
+  /* 전역 `overflow-wrap: anywhere` 가 좁을 때 `888건/2,328` 을 쪼갠다 */
+  white-space: nowrap; overflow-wrap: normal; flex: none;
+}
+.tb-count b { color: var(--text); font-weight: 600; }
+/* 아랫줄 — 목록을 좁히는 것. 머리줄과 **한 덩어리**로 읽히게 사이 선을 없앤다 */
+.tb-filters {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px calc(var(--gutter) + 14px);
+  border-top: 1px solid var(--border);
+  background: var(--bg-sunken);
+}
+.tb-filters .right {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  white-space: nowrap; padding-left: 8px; flex: none;
+}
+
+.dd { position: relative; }
+/* 윗줄의 버튼들(`컬럼`·`일괄`)은 **실선**이다 — 필터가 아니라 늘 같은 동작이다.
+   ⚠️ 필터 박스 안은 다르다. 바로 아래 `.tb-filters` 규칙을 볼 것. */
+.dd > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 27px; padding: 0 9px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12-5); white-space: nowrap;
+}
+.dd > summary::-webkit-details-marker { display: none; }
+.dd > summary:hover { color: var(--accent-text); border-color: var(--accent); background: var(--accent-soft); }
+.dd[open] > summary { color: var(--text); }
+
+/* ★★ **필터 박스 안은 점선 → 걸리면 실선** (2026-09-16 사용자 지시 —
+   *"필터 적용 전에는 dot, 적용되면 선으로 되던 기존 상태가 훨씬 좋다"*).
+   테두리 모양 하나가 **걸렸나 안 걸렸나**를 말한다. 잠깐 전부 실선으로 바꿨다가
+   되돌렸다 — 실선끼리는 색만으로 갈라야 해서 한눈에 안 읽혔다. */
+.tb-filters .dd > summary { border-style: dashed; }
+.tb-filters .dd[open] > summary,
+.tb-filters .ddbox.on > .dd > summary { border-style: solid; }
+
+/* ── 걸린 필터 버튼 (2026-09-16 — 칩을 대신한다) ────────────
+   ★ `.ddbox` 는 **버튼 + `×`** 를 한 덩어리로 보이게 하는 껍데기다.
+     `×` 를 `<summary>` 안에 넣으면 누를 때마다 드롭다운이 같이 열려서,
+     필터를 푸는 동작인데 메뉴가 펼쳐진다. 그래서 형제로 뺐다.
+   ⚠️ 그러면 `.dd-menu`(absolute)의 기준이 `.ddbox` 여야 한다 —
+     `.dd` 의 `position:relative` 를 여기서만 푼다. */
+.ddbox { position: relative; display: inline-flex; align-items: center; }
+.ddbox > .dd { position: static; }
+.ddbox > .dd > summary .dd-v { color: var(--text); font-weight: 500; }
+/* 걸렸다 — 진한 테두리 + 연한 바탕. 오른쪽 모서리는 `×` 와 이어지게 편다 */
+.ddbox.on > .dd > summary {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--text-dim);
+  border-right: 0; border-radius: var(--r-sm) 0 0 var(--r-sm); padding-right: 7px;
+}
+.dd-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 27px; width: 21px; flex: none;
+  border: 1px solid var(--accent); border-left: 0;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--accent-soft); color: var(--text-dim);
+}
+.dd-x:hover { background: var(--surface); color: var(--text); }
+
+.dd-menu {
+  position: absolute; top: calc(100% + 5px); left: 0;
+  min-width: 190px; max-height: 320px; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  padding: 4px; z-index: 50;
+}
+.dd-menu a {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--r-sm);
+  font-size: var(--fs-12-5); white-space: nowrap;
+}
+.dd-menu a:hover { background: var(--accent-soft); color: var(--accent-text); }
+/* 팀 머리글 — 사람 목록이 전원(16명)이 되면서 묶음이 필요해졌다 (2026-09-11) */
+.dd-group {
+  display: block; padding: 7px 8px 3px;
+  font-size: var(--fs-11); color: var(--text-faint); letter-spacing: .02em;
+}
+.dd-group:not(:first-child) { border-top: 1px solid var(--border); margin-top: 3px; }
+
+/* ── 컬럼 고르기 (2026-09-16) ────────────────────────────── */
+.cols-menu { min-width: 170px; }
+.cols-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--text); text-align: left;
+  font-size: var(--fs-12-5); cursor: pointer;
+}
+.cols-item:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-text); }
+/* 끌 수 없는 칸(체크박스·제목)은 눌리지 않는다는 걸 모양으로 말한다 */
+.cols-item:disabled { color: var(--text-faint); cursor: default; }
+.cols-item.on { color: var(--text); font-weight: 500; }
+.cols-reset {
+  display: block; width: 100%; margin-top: 4px; padding: 7px 8px;
+  border: 0; border-top: 1px solid var(--border); border-radius: 0;
+  background: none; color: var(--text-dim); font-size: var(--fs-12); cursor: pointer;
+}
+.cols-reset:hover { color: var(--accent-text); }
+/* 무엇까지 되돌아가는지 적어 둔다 — 안 적으면 칸 폭도 같이 풀리는 걸 모른다 */
+.cols-reset-sub { display: block; margin-top: 2px; font-size: var(--fs-11); color: var(--text-faint); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 27px; padding: 0 5px 0 9px;
+  border: 1px solid var(--accent-line); border-radius: var(--r-sm);
+  background: var(--accent-soft); font-size: var(--fs-12-5); white-space: nowrap;
+}
+.chip .k { color: var(--text-faint); }
+.chip .v { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 4px; color: var(--text-faint);
+}
+.chip .x:hover { background: var(--surface); color: var(--text); }
+.chip-clear {
+  color: var(--text-dim); font-size: var(--fs-12-5); padding: 0 6px;
+  height: 27px; display: inline-flex; align-items: center; border-radius: var(--r-sm);
+  /* ★ 전역 `overflow-wrap: anywhere`(한글 줄바꿈용)가 좁으면 `모두/지우/기` 로 쪼갠다.
+     실제로 툴바 오른쪽 끝에서 세로로 쪼개져 나왔다. */
+  white-space: nowrap; overflow-wrap: normal; flex: none;
+}
+.chip-clear:hover { background: var(--surface-hover); color: var(--text); }
+.toolbar .right {
+  /* ★ 자리가 없으면 **통째로** 다음 줄로 내려간다. 쪼개져서 일부만 잘리는 것보다
+     한 덩어리로 내려가는 편이 낫다 — `새 이슈` 는 무슨 일이 있어도 보여야 한다. */
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  color: var(--text-faint); font-size: var(--fs-12); white-space: nowrap; padding-left: 8px;
+  flex: none;
+}
+/* ★ 좁으면 한 줄을 통째로 내준다. 쪼개져서 일부만 잘리는 것보다 낫다.
+   미디어 쿼리는 기본 규칙 **뒤**에 둔다 — 특이도를 올려주지 않는다.
+   (2026-09-16 — 컬럼·일괄·건수가 윗줄로 가서 여기 남은 건 `저장된 필터` 뿐이다) */
+@media (max-width: 560px) {
+  .toolbar .right {
+    margin-left: 0; padding-left: 0; width: 100%;
+    flex-wrap: wrap; justify-content: flex-end;
+  }
+}
+
+/* ── 엑셀 내보내기 · 저장된 필터 (요구사항서 09) ─────────────
+   둘 다 툴바 오른쪽, '새 이슈' 왼쪽에 둔다. 목록을 보고 나서 하는 일이라
+   시선이 왼쪽 필터 → 오른쪽 행동 순으로 흐른다. */
+.btn-export {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 27px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12-5); white-space: nowrap;
+}
+.btn-export:hover { color: var(--accent-text); border-color: var(--accent); background: var(--accent-soft); }
+
+/* ★ 드롭다운이 오른쪽 끝에 있다. left:0 이면 화면 밖으로 나간다 */
+.sf .dd-menu { left: auto; right: 0; }
+.sf-menu { min-width: 260px; padding: 6px; }
+.sf-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px; margin-left: 2px;
+  border-radius: 8px; background: var(--accent-soft); color: var(--accent-text);
+  font-size: var(--fs-10-5); font-weight: 600;
+}
+.sf-head {
+  margin: 6px 6px 3px; font-size: var(--fs-10-5); font-weight: 600;
+  letter-spacing: 0.04em; color: var(--text-faint);
+}
+.sf-head:first-child { margin-top: 2px; }
+.sf-row { display: flex; align-items: center; gap: 2px; }
+.sf-row a { flex: 1; min-width: 0; }
+.sf-row a > :first-child { overflow: hidden; text-overflow: ellipsis; }
+.sf-tag, .sf-by {
+  flex: none; margin-left: auto; padding: 1px 5px; border-radius: 4px;
+  font-size: var(--fs-10); color: var(--text-faint); background: var(--bg-sunken);
+}
+.sf-x {
+  flex: none; width: 20px; height: 20px; border: 0; border-radius: 4px;
+  background: none; color: var(--text-faint); font-size: var(--fs-14); line-height: 1; cursor: pointer;
+}
+.sf-x:hover { background: var(--surface-hover); color: var(--text); }
+.sf-empty { margin: 8px 6px; font-size: var(--fs-11-5); line-height: 1.6; color: var(--text-faint); }
+.sf-empty.dim { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.sf-save {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+.sf-save input[name="name"] {
+  flex: 1 1 100%; min-width: 0; padding: 6px 8px;
+  font: inherit; font-size: var(--fs-12); color: var(--text);
+  background: var(--bg-sunken); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.sf-save input[name="name"]:focus { outline: none; border-color: var(--accent); }
+.sf-share {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-11-5); color: var(--text-dim); cursor: pointer;
+}
+.sf-share input { width: 13px; height: 13px; accent-color: var(--accent); }
+.btn-primary.sm { margin-left: auto; padding: 5px 12px; font-size: var(--fs-12); }
+
+/* 설정 탭에서 **다른 구역**으로 가는 길.
+   프로젝트 설정 ↔ 전역 설정(팀·사용자). 색을 달리해 같은 묶음이 아님을 보인다. */
+.tab.out {
+  margin-left: auto; border-style: dashed;
+  color: var(--text-faint); font-weight: 400;
+}
+.tab.out:hover { color: var(--accent-text); border-color: var(--accent); }
+
+/* ════ 일괄 편집 · 이슈 템플릿 (요구사항서 09) ══════════════ */
+
+.bulk .dd-menu { left: auto; right: 0; }
+.bulk-menu { width: 320px; max-width: calc(100vw - 24px); padding: 10px; }
+.bk-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px; margin-left: 3px;
+  border-radius: 8px; background: var(--accent-text); color: #fff;
+  font-size: var(--fs-10); font-weight: 700;
+}
+.bk-head { margin: 0 0 9px; font-size: var(--fs-12); line-height: 1.5; color: var(--text-dim); }
+.bk-head b { color: var(--text); }
+.bk-head span { display: block; margin-top: 3px; font-size: var(--fs-11); color: var(--text-faint); }
+.bk-form { display: flex; flex-direction: column; gap: 7px; }
+.bk-form select {
+  width: 100%; padding: 6px 8px; font: inherit; font-size: var(--fs-12);
+  color: var(--text); background: var(--bg-sunken);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.bk-plats {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin: 0; padding: 7px 9px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.bk-plats label { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12);  white-space: nowrap; }
+.bk-form .btn-primary { margin-left: 0; }
+.bk-done { margin: 8px 0 0; font-size: var(--fs-11-5); color: var(--accent-text); }
+.bk-note {
+  margin: 9px 0 0; padding-top: 8px; border-top: 1px solid var(--border);
+  font-size: var(--fs-11); line-height: 1.55; color: var(--text-faint);
+}
+
+/* ── 등록 화면의 템플릿 칩 */
+.tpl-pick {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.tpl-k { font-size: var(--fs-11-5); font-weight: 600; color: var(--text-faint); margin-right: 2px; }
+.tpl-chip {
+  padding: 4px 11px; border: 1px dashed var(--border-strong); border-radius: 999px;
+  font-size: var(--fs-12-5); color: var(--text-dim); white-space: nowrap;
+}
+.tpl-chip:hover { border-color: var(--accent); color: var(--accent-text); }
+.tpl-chip.on {
+  border-style: solid; border-color: var(--accent-line);
+  background: var(--accent-soft); color: var(--accent-text); font-weight: 500;
+}
+.tpl-note { flex: 1 0 100%; font-size: var(--fs-11); color: var(--text-faint); }
+
+/* ── 관리자 템플릿 카드 */
+.tpl-admin { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.tpl-card {
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); padding: 12px;
+}
+.tpl-card.off { opacity: 0.72; }
+.tpl-form { display: flex; flex-direction: column; gap: 9px; }
+.tpl-form label { display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-11-5); }
+.tpl-form label > span { color: var(--text-faint); }
+.tpl-star { color: var(--accent-text); font-size: var(--fs-10-5); margin-left: 5px; }
+.tpl-form input:not([type="checkbox"]), .tpl-form select, .tpl-form textarea {
+  width: 100%; padding: 6px 8px; font: inherit; font-size: var(--fs-12);
+  color: var(--text); background: var(--bg-sunken);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.tpl-form textarea { resize: vertical; line-height: 1.6; }
+.tpl-form input:not([type="checkbox"]):focus, .tpl-form select:focus, .tpl-form textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+.tpl-row1 { display: flex; align-items: flex-end; gap: 8px; }
+.tpl-row1 .grow { flex: 1; }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 9px; }
+.tpl-plats {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin: 0; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.tpl-plats legend { padding: 0 5px; font-size: var(--fs-11); color: var(--text-faint); }
+.tpl-plats label { flex-direction: row; align-items: center; gap: 5px; font-size: var(--fs-12);  white-space: nowrap; }
+.tpl-toggle { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border); text-align: right; }
+
+/* ════ 알림 · 구독 (요구사항서 05·07) ══════════════════════ */
+
+/* ── 상단바 벨 */
+.nb > summary {
+  position: relative;
+  padding: 0 7px; height: 27px;
+  border: 0; background: none; color: var(--text-dim);
+}
+.nb > summary:hover { color: var(--accent-text); background: var(--accent-soft); }
+.nb-badge {
+  position: absolute; top: 0; right: 0;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: #dc2626; color: #fff;
+  font-size: var(--fs-9-5); font-weight: 700; line-height: 1;
+}
+/* ★ 벨은 상단바 오른쪽 끝이다. left:0 이면 드롭다운이 화면 밖으로 나간다 */
+.nb .dd-menu { left: auto; right: 0; }
+.nb-menu { width: 340px; max-width: calc(100vw - 24px); padding: 0; }
+.nb-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px 7px; border-bottom: 1px solid var(--border);
+}
+.nb-head b { font-size: var(--fs-12-5); }
+.nb-all {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  color: var(--text-faint); font-size: var(--fs-11-5);
+}
+.nb-all:hover { color: var(--accent-text); text-decoration: underline; }
+/* 머리글 오른쪽 — `모두 읽음`(약하게) + `전부 보기`(또렷하게) */
+.nb-acts { display: flex; align-items: center; gap: 10px; }
+.nb-more {
+  padding: 2px 8px; border: 1px solid var(--accent-line); border-radius: var(--r-sm);
+  background: var(--accent-soft); color: var(--accent-text);
+  font-size: var(--fs-11-5); font-weight: 500; white-space: nowrap;
+}
+.nb-more:hover { background: var(--accent); color: #fff; }
+.nb-empty { margin: 0; padding: 16px 12px; font-size: var(--fs-11-5); line-height: 1.65; color: var(--text-faint); }
+.nb-list { list-style: none; margin: 0; padding: 4px; max-height: 340px; overflow-y: auto; }
+.nb-list button {
+  display: flex; gap: 8px; width: 100%; text-align: left;
+  padding: 7px 8px; border: 0; border-radius: var(--r-sm);
+  background: none; font: inherit; color: inherit; cursor: pointer;
+}
+.nb-list button:hover { background: var(--surface-hover); }
+.nb-dot {
+  flex: none; width: 6px; height: 6px; margin-top: 6px;
+  border-radius: 50%; background: var(--accent);
+}
+.nb-list li.read .nb-dot, .notif-list li.read .nb-dot { background: var(--border-strong); }
+.nb-list li.read .nb-t { color: var(--text-dim); font-weight: 400; }
+.nb-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nb-t { font-size: var(--fs-12-5); font-weight: 500; line-height: 1.4; }
+.nb-seq {
+  font-family: var(--mono); font-size: var(--fs-11); color: var(--text-faint);
+  margin-right: 6px;
+}
+.nb-m {
+  display: flex; align-items: center; gap: 5px;
+  font-size: var(--fs-11); color: var(--text-faint);
+}
+.nb-k {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--bg-sunken); color: var(--text-faint); font-size: var(--fs-10);
+}
+
+/* ── /notifications */
+.notif { padding: 16px 18px 40px; max-width: 900px; margin-inline: auto; }
+
+/* ════ 내 계정 (`/account`) ═══════════════════════════════
+   폼은 로그인 화면의 것(`.login-form` · `.field` · `.login-error`)을 그대로 쓴다.
+   같은 «비밀번호를 넣는 칸» 이 화면마다 다르게 생기면 안 된다. */
+.account { padding: 20px 18px 40px; max-width: 420px; }
+.account-who { margin: 0 0 18px; font-size: var(--fs-13); color: var(--text); }
+.account-who .dim { color: var(--text-faint); font-family: var(--mono); font-size: var(--fs-12); }
+.account-h { margin: 0 0 12px; font-size: var(--fs-14); font-weight: 600; }
+.account-form small { font-weight: 400; color: var(--text-faint); }
+.account-ok {
+  margin: 0 0 14px; padding: 8px 10px; font-size: var(--fs-12-5);
+  color: var(--accent-text); background: var(--accent-soft);
+  border: 1px solid var(--border); border-radius: var(--r);
+}
+.account-note { margin: 16px 0 0; font-size: var(--fs-12); color: var(--text-dim); line-height: 1.6; }
+.notif-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+.notif-hint { margin: 0; flex: 1; font-size: var(--fs-12); line-height: 1.7; color: var(--text-dim); }
+.notif-hint .dim { color: var(--text-faint); font-size: var(--fs-11-5); }
+.notif-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.notif-list li { border-bottom: 1px solid var(--border); }
+.notif-list button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 8px; border: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+}
+.notif-list button:hover { background: var(--surface-hover); }
+.notif-list li.read .nf-t { color: var(--text-dim); font-weight: 400; }
+.nf-seq {
+  flex: none; width: 46px; font-family: var(--mono);
+  font-size: var(--fs-11-5); color: var(--text-faint); text-align: right;
+}
+.nf-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nf-t { font-size: var(--fs-12-5); font-weight: 500; }
+.nf-issue {
+  font-size: var(--fs-11-5); color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nf-meta {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-11); color: var(--text-faint);
+}
+.nf-time { min-width: 52px; text-align: right; }
+
+/* ── 이슈 상세 구독함 */
+.watchbox { padding: 2px 0 4px; }
+.wb-head { display: flex; align-items: center; gap: 8px; }
+.wb-k {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-12); color: var(--text-dim);
+}
+.wb-k b { color: var(--text); font-variant-numeric: tabular-nums; }
+.wb-n { font-size: var(--fs-11-5); color: var(--text-faint); }
+.wb-btn {
+  margin-left: auto; padding: 4px 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-dim);
+  font: inherit; font-size: var(--fs-11-5); cursor: pointer; white-space: nowrap;
+}
+.wb-btn:hover { border-color: var(--accent); color: var(--accent-text); }
+.wb-btn.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-text); }
+.wb-people { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+.wb-note { margin: 7px 0 0; font-size: var(--fs-11); line-height: 1.55; color: var(--text-faint); }
+
+/* ── 멘션 */
+.cmt-input { position: relative; }
+.mention-pop {
+  /* ★ 위에 띄우면 작성자 이름 줄을 덮는다. 아래로 연다 —
+     첨부 안내를 잠깐 가리는 편이 '누가 쓰는지'를 가리는 것보다 낫다 */
+  position: absolute; left: 8px; top: calc(100% - 2px); z-index: 60;
+  list-style: none; margin: 0; padding: 4px; min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  /* ★ **넘치면 굴린다** (D-98 · 2026-09-11). 예전엔 상한이 없어서, 후보가
+     프로젝트 멤버(5명)에서 **전체 사용자(14명)** 로 늘어난 순간(`C-42`)
+     목록이 화면 밖으로 흘러 **아래쪽 사람은 고를 수가 없었다.**
+     여덟 줄쯤에서 자르고 스크롤한다 — 상한을 px 로 박지 않는 이유는
+     글자 크기가 바뀌면 같이 따라와야 하기 때문이다. */
+  max-height: calc(8 * 27px + 8px);
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.mention-pop button {
+  display: block; width: 100%; text-align: left;
+  padding: 5px 9px; border: 0; border-radius: var(--r-sm);
+  background: none; font: inherit; font-size: var(--fs-12-5); color: inherit; cursor: pointer;
+}
+.mention-pop button:hover { background: var(--accent-soft); color: var(--accent-text); }
+/* ★ **부른 사람** — 입력칸 아래 한 줄 (`N-72`).
+   *"멘션이 제대로 걸렸는지 파악하기가 쉽지않아"* 에 답하는 줄이다.
+   강조가 안 보이는 상황(좁은 폭·한글 조합 중)에도 이건 남는다. */
+.cmt-called {
+  margin: 4px 2px 0; font-size: var(--fs-11-5); color: var(--text-dim);
+}
+.cmt-called b { color: var(--accent-text); font-weight: 500; }
+
+/* ★ 방향키로 고른 것은 **마우스로 가리킨 것과 같은 모양**이어야 한다 (`N-68`).
+   둘이 다르게 보이면 *"지금 Enter 를 누르면 누가 들어오나"* 를 화면이 둘로 말한다. */
+.mention-pop li[aria-selected="true"] > button {
+  background: var(--accent-soft); color: var(--accent-text);
+}
+/* ★ <mark> 의 기본 배경(노랑)을 지운다. 안 지우면 다크에서 눈이 아프다 */
+.mention {
+  background: var(--accent-soft); color: var(--accent-text);
+  padding: 0 3px; border-radius: 3px; font-weight: 500;
+}
+
+/* ★★ **거울 안에서는 글자 폭을 바꾸는 속성을 쓸 수 없다** (`N-73-2` · 2026-09-16).
+
+   `padding` 과 `font-weight` 는 둘 다 **뒤 글자를 밀어낸다.** 그런데 **커서는
+   입력칸이 그린다** — 거울에서만 밀리니 멘션 하나당 6px 씩 커서와 글자가 어긋났다.
+   멘션이 둘이면 두 배다. 제보: *"멘션을 하고 나면 그 다음 타이핑부터 커서의 위치가
+   맞지 않고 밀려."*
+
+   ⚠️ `box-shadow` 로 대신한다 — **레이아웃을 한 픽셀도 안 바꾸면서** 배경만 옆으로
+     번지게 하는 유일한 방법이다. `outline` 은 모서리를 못 둥글리고, `border` ·
+     `margin` · `letter-spacing` 은 전부 폭을 바꾼다.
+   ⚠️ `color` 는 폭을 안 바꾸므로 **그대로 둔다.** 색까지 빼면 강조가 아니게 된다. */
+.cmt-mirror .mention {
+  padding: 0; font-weight: inherit;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* ════ 컬럼 머리줄 ═════════════════════════════════════════
+   ★ 상태별 아코디언(`.group`)이 있던 자리다. 2026-09-16 에 없앴다.
+
+   ★★ **줄(`.row-wrap`)과 같은 뼈대다.** 바깥 여백 → 체크박스 자리 → 안쪽 상자.
+     예전엔 `margin-left` 로 밀어내서 왼쪽에 **흰 홈**이 파였고,
+     머리줄이 목록과 따로 노는 것처럼 보였다 (2026-09-16 제보). */
+
+.row-head {
+  display: flex; align-items: stretch;
+  padding-inline: var(--gutter);
+  background: var(--bg-group);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-11); font-weight: 600;
+  color: var(--text-dim); letter-spacing: .04em;
+  /* ★ 툴바가 감싸면 높이가 변한다. 실제 높이를 따라간다 (ToolbarHeight). */
+  position: sticky; top: calc(var(--h-topbar) + var(--toolbar-h, var(--h-toolbar))); z-index: 20;
+}
+/* 체크박스 자리 — 줄과 **같은 변수**를 쓴다 (`--check-ml` + `--check-w`) */
+.row-head .c-check { width: calc(var(--check-ml) + var(--check-w)); flex: none; }
+/* 안쪽 상자는 `.row` 와 **같은 값**이어야 한다 (gap 12 · padding 0 16 0 10) */
+.hc-in {
+  display: flex; align-items: center; gap: 12px;
+  flex: 1; min-width: 0; height: 32px;
+  padding: 0 16px 0 10px;
+}
+/* ★★ **말줄임은 칸이 아니라 안쪽 라벨(`.hl`)에 건다** (2026-09-16).
+     칸에 `overflow:hidden` 이 걸려 있으면 칸 밖으로 걸친 손잡이가 **잘려서
+     눌리지도 않는다.** 실제로 그래서 드래그가 통째로 안 먹었다 (아래 `.colgrip`). */
+.row-head .hc {
+  position: relative; overflow: visible;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.row-head .hl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.row-head .sortable { color: inherit; }
+.row-head .sortable:hover { color: var(--accent-text); }
+.row-head .sortable.on { color: var(--text); }
+.row-head .sarrow { font-size: 0.64em; line-height: 1; }   /* 머리글(12.5px)의 약 8px — 리터럴 px 대신 비율 (C-53) */
+
+/* ── 칸 폭 손잡이 ─────────────────────────────────────────
+   ★★ **칸과 칸 사이(12px)를 통째로 차지한다** (2026-09-16 제보 —
+     *"구분감도 없어서 조절하는 부분 있는지도 모르겠다"*).
+
+     예전에는 칸 **안쪽** 오른쪽 끝에 8px 로 붙어 있었다. 그래서 선이
+     **다음 칸에서 12px 떨어진 허공**에 떴다 — 두 칸의 경계로 안 읽혔고,
+     잡을 수 있는 자리라는 것도 알 길이 없었다.
+
+     이제 칸 사이에 걸친다. ⚠️ **선은 간격 한가운데가 아니라 `칸의 오른쪽 끝`이다** —
+     가운데(`+6px`)에 두었더니 다음 칸 라벨과 6px 밖에 안 떨어져 **라벨 앞에 붙은
+     장식처럼** 보였다 (2026-09-16 제보 — *"구분선 위치가 이상하다"*).
+     칸 끝에 두면 다음 라벨까지 12px 이 온전히 남아 경계로 읽힌다.
+
+   ⚠️ 밖으로 나갈 수 있는 건 `.hc` 의 `overflow` 를 풀었기 때문이다 (위 참고).
+     칸에 다시 `overflow:hidden` 을 걸면 **손잡이가 잘려 드래그가 통째로 죽는다.**
+   ★ 선은 **늘 보인다.** 마우스를 올리면 굵어지고 청록색이 된다 — 끌 수 있다는 말이다.
+     줄 본문에는 세로선을 넣지 않는다. 가로선만으로 충분하다. */
+.colgrip {
+  position: absolute; top: 0; right: -6px; width: 12px; height: 100%;
+  cursor: col-resize; touch-action: none; z-index: 2;
+}
+.colgrip::after {
+  content: ""; position: absolute; left: 6px; top: 5px; bottom: 5px; width: 1px;
+  background: var(--border-strong); transition: background .1s, width .1s;
+}
+.colgrip:hover::after { width: 2px; background: var(--accent); }
+/* 끄는 동안에는 손을 떼기 전까지 계속 굵게 (hover 가 떨어져도) */
+:root[data-colresize] .colgrip::after { transition: none; }
+/* ★ 제목 칸도 **끌 수 있다** (2026-09-16 제보 — *"이슈 타이틀의 가장 우측 구분선은
+   넓이 조절이 안 된다"*). 선을 그어 놓고 안 움직이면 고장으로 읽힌다. */
+/* 끄는 동안 목록 글자가 통째로 선택되는 것을 막는다 */
+:root[data-colresize] { user-select: none; cursor: col-resize; }
+
+/* ── 이력의 긴 글 (2026-09-17) ─────────────────────────────
+   전문을 남기기로 하면서 본문·코멘트가 통째로 들어온다. 접어 두지 않으면
+   이력 한 줄이 화면을 다 먹는다. */
+.hlong { display: inline-block; }
+.hlong > summary {
+  list-style: none; cursor: pointer;
+  color: var(--accent-text); font-size: var(--fs-12);
+}
+.hlong > summary::-webkit-details-marker { display: none; }
+.hlong > summary:hover { text-decoration: underline; }
+.hlong-body {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 6px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+}
+.hlong-side { display: flex; gap: 8px; align-items: flex-start; }
+.hlong-k {
+  flex: none; width: 18px; text-align: center;
+  color: var(--text-faint); font-size: var(--fs-11); padding-top: 1px;
+}
+.hlong pre {
+  margin: 0; flex: 1; min-width: 0;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: inherit; font-size: var(--fs-12-5); color: var(--text-dim);
+}
+.hlong-side:last-child pre { color: var(--text); }
+
+/* ── 변경 이력 버튼 (2026-09-17) ───────────────────────────
+   ★ 상세 **머리**에 둔다. 예전엔 본문·코멘트 아래에 통째로 펼쳐져 있어서
+     오래된 이슈일수록 **코멘트를 보려면 이력을 지나쳐야** 했다.
+   ★ 배지들(`.dmeta`) 오른쪽 끝에 붙는다 — 상태·우선순위와 같은 줄이지만
+     «읽는 값»이 아니라 «누르는 것»이라 떨어뜨려 놓는다. */
+.dhist {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 25px; padding: 0 9px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12-5); white-space: nowrap;
+}
+.dhist:hover { color: var(--accent-text); border-color: var(--accent); background: var(--accent-soft); }
+.dhist.on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+.dhist .cnt {
+  min-width: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--surface-hover); color: var(--text-dim);
+  font-size: var(--fs-11); text-align: center;
+}
+.dhist.on .cnt { background: var(--surface); }
+/* ── 이슈 삭제 (2026-09-17 · 사용자 지시) ──────────────────────────────
+   ★ **`수정` 버튼 바로 왼쪽에 선다.** 둘 다 `.dedit` 를 기준 상자로 삼는
+     `position: absolute` 다 — 같은 기준이라야 나란히 선다.
+   ⚠️ `right` 오프셋은 **`수정` 버튼 폭(62px) + 사이 8px** 이다. 하드코딩이지만
+     이 저장소가 이미 쓰는 방식이고(`.dtitle-row` 의 `padding-right`), 글자 크기가
+     고정 px 라 흔들리지 않는다. **겹치면 브라우저 검증이 잡는다** (`D-124` 검사). */
+/* ★ **빨강은 여기서 정하지 않는다.** `.btn-ghost.danger` 가 이미 밝은 테마와
+     어두운 테마의 위험색을 한 곳에서 정해 뒀다 (`globals.css` 아래쪽).
+     여기서 또 정하면 색이 두 벌이 되어 **한쪽만 고쳐지는 날**이 온다. */
+.ddel > summary.ddel-btn {
+  position: absolute; top: 2px; right: 70px; z-index: 2;
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.ddel > summary::-webkit-details-marker { display: none; }
+.ddel[open] > summary.ddel-btn { background: #dc262614; }
+:root[data-theme="dark"] .ddel[open] > summary.ddel-btn { background: #fca5a51f; }
+
+/* 펼치면 버튼 **바로 아래**에 뜬다. 본문을 밀지 않는다 —
+   ⚠️ `position: absolute` 가 아니면 `.dread` 가 통째로 아래로 밀려
+     읽던 자리가 사라진다 (`D-116` 에서 배운 것과 같은 이유). */
+.ddel-pop {
+  position: absolute; top: 34px; right: 0; z-index: 3;
+  width: min(340px, 100%);
+  padding: 11px 13px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 12%));
+}
+.ddel-pop p { margin: 0 0 9px; font-size: var(--fs-12-5); color: var(--text-dim); line-height: 1.65; }
+
+/* 고치는 동안에는 숨긴다 — 폼이 열려 있는데 옆에 빨간 버튼이 서 있으면 손이 미끄러진다 */
+.dedit:has(.edit-wrap[open]) .ddel { display: none; }
+
+/* 숨겨진 이슈를 보고 있을 때의 띠 — 화면이 스스로 «이건 안 보이는 이슈» 라고 말한다 */
+.dhide-back {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+}
+.dhide-tag {
+  padding: 2px 8px; border-radius: var(--r-sm);
+  background: var(--accent-soft); color: var(--accent-text);
+  font-size: var(--fs-12); font-weight: 600;
+}
+.dhide-restore {
+  height: 25px; padding: 0 10px;
+  border: 1px solid var(--accent); border-radius: var(--r-sm);
+  background: none; color: var(--accent-text); font-size: var(--fs-12); cursor: pointer;
+}
+.dhide-restore:hover { background: var(--accent-soft); }
+/* 목록 필터 박스의 `숨긴 이슈` — 드롭다운이 아니라 그냥 켜고 끄는 링크다 */
+.deleted-toggle {
+  height: 27px; padding: 0 9px;
+  border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12-5); white-space: nowrap;
+}
+.deleted-toggle:hover { color: var(--accent-text); border-color: var(--accent); background: var(--accent-soft); }
+.deleted-toggle.on {
+  border-style: solid; border-color: var(--accent);
+  background: var(--accent-soft); color: var(--text);
+}
+
+/* ── 팝업 (2026-09-17) ─────────────────────────────────────
+   ★ 지금은 변경 이력 하나가 쓴다. **여는 것도 닫는 것도 링크**라 JS 가 없어도 된다.
+
+   ⚠️⚠️ **`z-index` 가 이 팝업의 전부다.**
+     상단바가 40, 툴바가 30, 사이드 패널(`.peek`)이 25 다. 그런데 `.peek` 은
+     `z-index` 를 가져서 **쌓임 맥락**을 만든다 — 그 안에서 `position: fixed` 를 써도
+     맥락을 벗어나지 못해 **툴바 밑에 깔린다.** 그래서 팝업이 열린 동안에만
+     `.peek` 자체를 끌어올린다 (`:has()` — 이 저장소는 `.dedit:has(...)` 에서 이미 쓴다). */
+/* ⚠️ `grid-template-rows: minmax(0,1fr)` 와 아래 `.modal-body { min-height: 0 }` 는
+   **둘 다 있어야 한다.** 없으면 팝업이 **화면 밖 y=1905 에** 그려졌다:
+     ① flex 세로 배치의 자식은 기본이 `min-height: auto` 라 **내용보다 안 줄어든다** —
+        이력 4,410px 이 그대로 팝업의 최소 높이가 된다
+     ② 그러면 그리드 행이 4,482px 이 되고, `place-items: center` 가 **그 행의**
+        가운데에 놓는다. 화면 가운데가 아니다
+   `max-height` 는 그려지는 크기만 줄일 뿐 **최소 높이를 안 줄인다.** */
+.modal-back {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center; grid-template-rows: minmax(0, 1fr);
+  padding: 24px;
+}
+.listwrap--peek .peek:has(.modal-back) { z-index: 61; }
+/* 딤. 내용보다 **뒤에** 깔린다 — 안에서 누르면 안 닫혀야 한다 */
+.modal-scrim { position: absolute; inset: 0; background: #0b1211a8; }
+.modal {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  width: min(880px, 100%); max-height: min(720px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border); flex: none;
+}
+.modal-head h2 { margin: 0; font-size: var(--fs-lg); display: flex; align-items: center; gap: 6px; }
+.modal-head .cnt {
+  padding: 1px 7px; border-radius: 9px;
+  background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-11-5);
+}
+.modal-sub { color: var(--text-faint); font-size: var(--fs-12-5); font-family: var(--mono); }
+.modal-x {
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--text-dim); flex: none;
+}
+.modal-x:hover { background: var(--surface-hover); color: var(--text); }
+/* 길어지면 **팝업 안에서만** 구른다 */
+.modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 14px; }
+/* 뒤 화면은 안 굴러야 한다 — 좁은 화면 서랍(`C-21`)과 같은 규칙 */
+body:has(.modal-back) { overflow: hidden; }
+
+/* 팝업 안에서는 폭이 넉넉하니 전/후를 **나란히** 놓는다 */
+.modal .hlong-body { flex-direction: row; gap: 10px; }
+.modal .hlong-side { flex: 1; min-width: 0; }
+@media (max-width: 720px) {
+  .modal-back { padding: 0; }
+  .modal { width: 100%; max-height: 100%; height: 100%; border: 0; border-radius: 0; }
+  .modal .hlong-body { flex-direction: column; }
+}
+
+/* ════ 이슈 행 ═════════════════════════════════════════════ */
+
+.rows { display: flex; flex-direction: column; }
+/* ── 한 줄 = [체크박스][링크]
+   ★ 체크박스는 <Link> **밖**에 있다. 안에 넣으면 중첩 인터랙티브가 되어 클릭이 삼켜진다.
+     테두리는 링크가 아니라 이 껍데기가 그린다 — 안 그러면 체크박스 옆만 선이 없다. */
+.row-wrap {
+  display: flex; align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.row-wrap:last-child { border-bottom: none; }
+/* ★ 체크박스가 26px 를 먹어서 360px 에서 21px 넘쳤다. 좁은 화면에서 여백을 줄인다.
+   미디어 쿼리는 기본 규칙 **뒤**에 둔다 — 특이도를 올려주지 않는다. */
+/* 좁은 화면의 행 조정은 파일 맨 끝에 있다 — .row .pri 정의보다 뒤여야 이긴다 */
+/* ★ 선택자를 `input[type="checkbox"].row-check` 로 쓴 이유:
+   통일 체크박스 규칙(`input[type="checkbox"] { margin: 0 }`)이 **특이도에서 이겨서**
+   왼쪽 여백을 통째로 먹었다. 그 결과 체크박스가 사이드바에 딱 붙어 나왔다.
+   클래스 하나(0,1,0)로는 못 이긴다 — 같은 자리에서 되찾아야 한다. */
+/* ★ 체크박스가 차지하는 자리를 **한 곳에서** 정한다.
+   머리줄의 빈 칸(`.row-head .c-check`)이 같은 값을 써야 머리와 몸이 맞는다 —
+   손으로 `29px` 이라고 적었다가 실제 폭이 15px 이라 **2px 밀렸다**. */
+:root { --check-w: 15px; --check-ml: 16px; }
+input[type="checkbox"].row-check { margin: 0 0 0 var(--check-ml); width: var(--check-w); }
+
+/* ── 목록 폭 상한 (2026-09-11) ───────────────────────────────
+   넓은 화면에서 이 목록만 상한이 없었다 (대시보드 1180 · 상세 960 · 설정 940 은 이미 있다).
+   2560px 에서 제목 칸 하나가 **1,537px** 를 먹었다 — 훑을 때마다 눈이 그 거리를 왕복한다.
+   ⚠️ 1816px(=1600+사이드바 216) 아래에서는 `max()` 가 0 이라 **아무 일도 안 한다.**
+     1440·1680 노트북은 전혀 안 바뀐다. */
+.toolbar, .row-wrap, .row-head, .pageinfo, .pager {
+  /* 0 이면 아무 일도 안 한다. 아래 여백 선언들이 이 값을 **더해서** 쓴다 —
+     새 규칙으로 덮어쓰면 좁은 화면의 여백(12px 등)까지 같이 덮인다. */
+  --gutter: max(0px, calc((100% - var(--w-list)) / 2));
+}
+.row-wrap { padding-inline: var(--gutter); }
+.pageinfo, .pager { padding-inline: var(--gutter); }
+
+.row {
+  display: flex; align-items: center; gap: 12px;
+  flex: 1; min-width: 0;
+  height: var(--row-h); padding: 0 16px 0 10px;   /* 왼쪽 여백은 체크박스가 만든다 */
+  color: var(--text);
+}
+/* ★ 호버는 `.row`(링크)가 아니라 **`.row-wrap`(줄 전체)** 에 준다.
+   링크에 주면 체크박스가 빠져서, 줄 왼쪽 29px 만 색이 안 차는 어정쩡한 모양이 된다.
+   왼쪽 강조선도 같이 wrap 으로 옮긴다 — 줄의 진짜 왼쪽 끝에서 시작해야 한다. */
+.row-wrap:hover { background: var(--surface-hover); box-shadow: inset 2px 0 0 var(--accent); }
+/* 고른 줄은 호버보다 세다 — 뒤에 둬서 이기게 한다. 고른 줄에 호버하면 조금 더 진해진다 */
+.row-wrap:has(.row-check:checked) { background: var(--accent-soft); }
+.row-wrap:has(.row-check:checked):hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row .pri { flex: none; width: 12px; display: flex; justify-content: center; }
+/* ★ 이슈 번호는 **찾는 값**이다 — 보조 정보가 아니다 (`I-68` · 2026-09-11).
+   `--text-faint` 로 흐리게 두니 *"눈에 너무 안 들어와"* 를 들었다. */
+/* ★ 번호는 **절대 줄바꿈되지 않는다.** 칸이 모자라면 두 줄로 접히면서 행 높이를
+   밀고 나간다 — 실제로 폰에서 `PT-` / `2291` 로 접혔다 (2026-09-12). */
+.row .id { flex: none; width: 78px; font-family: var(--mono); font-size: var(--fs-12); font-weight: 600; color: var(--text); white-space: nowrap; }
+/* 상태 pill — 평면 목록에만 뜬다 (그룹 모드는 그룹 머리가 말한다).
+   ★ 색은 사이드바·대시보드와 **같은 상태 색**이다. 화면마다 색이 다르면 못 외운다. */
+.row .st {
+  flex: none; width: 124px;
+  display: inline-flex; align-items: center; gap: 6px;
+  justify-content: flex-start;
+  white-space: nowrap; overflow-wrap: normal;
+  font-weight: 500; color: var(--text-dim);
+}
+.row .st .sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.row .title {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-13);
+}
+.row .title.none { color: var(--text-faint); font-style: italic; }
+.row .meta { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* ════ 컬럼 — 보이기 / 숨기기 / 폭 ═════════════════════════
+   ★★ **서버는 전부 그리고 여기서 감춘다** (2026-09-16).
+     `<html data-cols="pri no title …">` 하나만 보고, 머리 칸과 줄 칸이
+     **같은 `c-*` 클래스**를 달아 함께 숨는다.
+
+   ⚠️ `~=` 는 **공백으로 나뉜 낱말** 하나와 맞춘다. 그래서 값이 `"pri no title"`
+     처럼 공백으로 이어져야 하고, `data-cols="priority"` 가 `~="pri"` 에
+     걸리는 일이 없다.
+   ⚠️ `check`·`title` 은 끌 수 없어(`always`) 여기 규칙이 없다. */
+:root:not([data-cols~="pri"])      .c-pri,
+:root:not([data-cols~="no"])       .c-no,
+:root:not([data-cols~="reporter"]) .c-reporter,
+:root:not([data-cols~="assignee"]) .c-assignee,
+:root:not([data-cols~="created"])  .c-created,
+:root:not([data-cols~="updated"])  .c-updated,
+:root:not([data-cols~="att"])      .c-att,
+:root:not([data-cols~="cmt"])      .c-cmt,
+:root:not([data-cols~="status"])   .c-status,
+:root:not([data-cols~="reported"]) .c-reported,
+:root:not([data-cols~="platform"]) .c-platform,
+:root:not([data-cols~="env"])      .c-env,
+:root:not([data-cols~="system"])   .c-system,
+:root:not([data-cols~="round"])    .c-round,
+:root:not([data-cols~="repro"])    .c-repro,
+:root:not([data-cols~="screen"])   .c-screen,
+:root:not([data-cols~="ver"])      .c-ver,
+:root:not([data-cols~="qai"])      .c-qai { display: none; }
+
+/* ── 칸 폭 ────────────────────────────────────────────────
+   ★★ **머리 칸과 줄 칸이 같은 변수를 본다.** 따로 두면 손잡이를 끌었을 때
+     머리와 몸이 어긋난다. 기본값은 `src/lib/issue-columns.ts` 의 `COL_W` 와 같아야 한다.
+   ⚠️ 플랫폼·환경은 **서버가 세어 넘기는 폭**(`--w-plat`·`--w-env`)이 기본이고,
+     손으로 끈 값(`--cw-*`)이 있으면 그쪽이 이긴다. */
+.row .c-pri,      .row-head .c-pri      { width: var(--cw-pri, 86px); flex: none; }
+.row .c-no,       .row-head .c-no       { width: var(--cw-no, 78px); flex: none; }
+.row .c-status,   .row-head .c-status   { width: var(--cw-status, 108px); flex: none; }
+.row .c-platform, .row-head .c-platform { width: var(--cw-platform, calc(var(--w-plat, 3.2) * 1em + 16px)); flex: none; }
+.row .c-env,      .row-head .c-env      { width: var(--cw-env, calc(var(--w-env, 5) * 1em + 16px)); flex: none; }
+.row .c-system,   .row-head .c-system   { width: var(--cw-system, 118px); flex: none; }
+.row .c-round,    .row-head .c-round    { width: var(--cw-round, 78px); flex: none; }
+.row .c-repro,    .row-head .c-repro    { width: var(--cw-repro, 78px); flex: none; }
+.row .c-screen,   .row-head .c-screen   { width: var(--cw-screen, 130px); flex: none; }
+.row .c-ver,      .row-head .c-ver      { width: var(--cw-ver, 130px); flex: none; }
+.row .c-qai,      .row-head .c-qai      { width: var(--cw-qai, 86px); flex: none; }
+.row .c-reporter, .row-head .c-reporter { width: var(--cw-reporter, 46px); flex: none; }
+.row .c-assignee, .row-head .c-assignee { width: var(--cw-assignee, 46px); flex: none; }
+.row .c-created,  .row-head .c-created  { width: var(--cw-created, 100px); flex: none; }
+.row .c-updated,  .row-head .c-updated  { width: var(--cw-updated, 100px); flex: none; }
+.row .c-reported, .row-head .c-reported { width: var(--cw-reported, 100px); flex: none; }
+.row .c-att,      .row-head .c-att      { width: var(--cw-att, 48px); flex: none; }
+.row .c-cmt,      .row-head .c-cmt      { width: var(--cw-cmt, 48px); flex: none; }
+/* 제목은 남는 폭을 먹는다 — 그래서 손잡이가 없다 */
+/* ★★ 제목은 **남는 폭을 먹는 칸**이다. 그런데 끌 수도 있어야 한다 (2026-09-16).
+   `max-width` 하나로 둘 다 된다 — 안 정해 뒀으면 끝까지 늘어나고(`none`),
+   끌어서 정하면 거기서 멈춘다. `flex-grow` 를 끄는 두 번째 변수가 필요 없다. */
+.row .c-title, .row-head .c-title {
+  flex: 1 1 auto; min-width: 0;
+  width: var(--cw-title, auto); max-width: var(--cw-title, none);
+}
+
+/* ── 정렬 — **전부 왼쪽** (2026-09-16 사용자 지시) ──────────
+   *"각 컬럼의 값인 글과 숫자의 시작점과 컬럼 첫글자를 맞춰서 통일감을"*
+   ⚠️ 알약(플랫폼·환경·시스템) **안**의 글자는 가운데 그대로다 (`I-69`) —
+     칸 자체가 왼쪽에서 시작하는 것과 다른 이야기다. */
+.row .cell {
+  font-size: var(--fs-11-5); color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .c-qai { font-family: var(--mono); }
+.row .who { display: inline-flex; justify-content: flex-start; }
+/* ⚠️ `9/11 13:55` 이 두 줄로 접히면 행 높이가 들쭉날쭉해진다.
+   전역 `overflow-wrap: anywhere`(한글 줄바꿈용)가 여기까지 오므로 꺼야 한다. */
+.row .c-created, .row .c-updated, .row .c-reported {
+  white-space: nowrap; overflow-wrap: normal;
+}
+/* ★ 우선순위만 값 앞에 **점**이 있어 글자가 밀린다. 머리글도 그만큼 밀어
+   `우선순위` 의 `우` 와 `Critical` 의 `C` 가 같은 자리에서 시작하게 한다. */
+.row-head .c-pri { padding-left: 13px; }
+
+/* 내용 왼쪽에 오는 두 칸. 폭을 고정해야 여러 줄이 세로로 정렬돼 훑기 좋다. */
+.pill {
+  font-size: var(--fs-11-5); color: var(--text-dim);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 1px 7px;
+  overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; flex: none;
+}
+/* ★ **폭은 서버가 정한다** (2026-09-12). 그 화면에 실제로 뜬 값 중 제일 긴 것에 맞춘다.
+   `--w-*` 는 글자 폭(em)이고, 여기에 좌우 여백 14px + 테두리 2px 을 더한다.
+   값이 없으면(계산 전) 예전 고정폭으로 떨어진다.
+   ⚠️ CSS 만으로는 못 한다 — 줄이 flex 라 칸 폭이 **줄마다** 계산되고 줄끼리 안 맞는다 (`C-61-1`). */
+.pill.env { width: calc(var(--w-env, 5) * 1em + 16px); }
+/* ★ **박스 안 글자는 가운데**다 (2026-09-12 제보). 상세 오른쪽 속성 값(`D-104`)과 같은 규칙 —
+   화면이 달라도 같은 모양이어야 한다. 칸 폭이 그 화면의 제일 긴 값에 맞춰지므로
+   가운데에 놓아도 글자가 한쪽으로 쏠려 보이지 않는다. */
+.pill.plat, .pill.env { text-align: center; }
+/* ★ **좁아지면 칸 수를 줄인다** (I-12 · 2026-09-12 제보 — *"작은 화면에서는 기능만
+   보여도 괜찮다"*). 남기는 순서는 **환경 > 플랫폼** 이다.
+   ★ **2026-09-16 개정** — 시스템 칸(≈110px)이 빠졌으므로 임계값을 그만큼 내렸다.
+     안 내리면 칸이 하나 줄었는데도 **예전과 같은 폭에서 사라진다.**
+     (플랫폼 1250 → 1130 · 환경 1150 → 1030) */
+@media (max-width: 1030px) { .pill.env { display: none; } }
+/* ★ 첨부·코멘트 **한 규격** (2026-09-16). 아이콘 11px · 선 굵기 2.2 · 같은 회색.
+   ⚠️ `min-width` 가 핵심이다 — 값이 없어도 **자리를 지켜야** 아바타 세로줄이 안 흔들린다.
+     예전엔 첨부가 조건부로 사라져 줄마다 아바타 위치가 달랐다. */
+.rmark {
+  /* ★ 2026-09-16 — **왼쪽 정렬**로 바꿨다. 폭은 위 `.c-att`/`.c-cmt` 가 정한다 */
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 3px;
+  font-size: var(--fs-11-5); color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* ★ 날짜도 왼쪽 정렬. 폭은 `.c-created` 등이 정한다 */
+.date { font-size: var(--fs-11-5); color: var(--text-faint); font-family: var(--mono); }
+
+.sdot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 2.5px var(--bg); }
+.pdot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+
+.avatar {
+  width: 19px; height: 19px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--fs-10); font-weight: 600; letter-spacing: 0;   /* 글자색은 Avatar 가 밝기에 따라 고른다 (C-51) */
+}
+.avatar.ghost { background: transparent; border: 1px dashed var(--border-strong); color: var(--text-faint); }
+
+/* ★ 색은 컴포넌트가 **테마별로 두 벌** 계산해 넘긴다 (`C-51` · `src/lib/color.ts`).
+   DB 색을 그대로 글자로 쓰면 대비를 아무도 보장하지 않는다 — 실측 2.09 였다. */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-11-5); font-weight: 500;
+  border-radius: var(--r-sm); padding: 2px 8px;
+  white-space: nowrap; border: 1px solid transparent;
+  color: var(--c-l); background: var(--bg-l); border-color: var(--bd-l);
+}
+:root[data-theme="dark"] .badge { color: var(--c-d); background: var(--bg-d); border-color: var(--bd-d); }
+
+/* ════ 페이지네이션 / 빈 상태 ══════════════════════════════ */
+
+/* 쪽 정보 — '몇 건 중 몇 번째' 와 쪽 크기.
+   ★ 페이지 번호만 있으면 지금 어디쯤인지 알 수가 없다. */
+.pageinfo {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px calc(var(--gutter) + 14px) 0;
+  font-size: var(--fs-12); color: var(--text-faint);
+}
+.pi-range b { color: var(--text-dim); font-variant-numeric: tabular-nums; font-weight: 600; }
+.pi-pg {
+  margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.pi-per { display: inline-flex; align-items: center; gap: 4px; }
+.pi-per a {
+  min-width: 30px; height: 24px; padding: 0 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.pi-per a:hover { border-color: var(--accent); color: var(--accent-text); }
+.pi-per a.on {
+  border-color: var(--accent-line); background: var(--accent-soft);
+  color: var(--accent-text); font-weight: 600;
+}
+
+.pager { display: flex; gap: 4px; justify-content: center; align-items: center; padding: 18px calc(var(--gutter) + 18px); flex-wrap: wrap; }
+.pager a, .pager span {
+  min-width: 28px; height: 28px; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  font-size: var(--fs-12-5); color: var(--text-dim);
+}
+.pager a:hover { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
+.pager .current { background: var(--accent-text); border-color: var(--accent-text); color: var(--accent-fg); font-weight: 600; }
+.pager .gap { border: none; min-width: 14px; }
+
+.empty { padding: 72px 20px; text-align: center; color: var(--text-dim); }
+.empty h3 { margin: 0 0 6px; font-size: var(--fs-14); font-weight: 600; color: var(--text); }
+.link { color: var(--accent-text); }
+.link:hover { text-decoration: underline; }
+
+/* ════ 상세 ════════════════════════════════════════════════ */
+
+.detail-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 264px; min-height: calc(100vh - var(--h-topbar)); }
+@media (max-width: 980px) { .detail-wrap { grid-template-columns: 1fr; } }
+
+/* ── 넓은 화면에서 본문을 가운데로 ──────────────────────────
+   *"화면이 넓을때 한쪽에 쏠려있거든? 가운데에 잘 위치해야해"*
+
+   `max-width` 만 걸고 가운데 정렬을 안 하면 본문은 **늘 왼쪽에 붙는다.**
+   재보니 1920px 에서 본문 오른쪽에 **660px**, 2560px 에서 **1300px** 이 비어 있었다.
+   왼쪽 사이드바와 오른쪽 속성 패널 사이에 낀 본문이 한쪽으로 쏠려 보이는 이유다.
+   → `margin-inline: auto` 로 **자기에게 할당된 칸의 가운데**에 세운다.
+     (아래 `.admin` · `.notif` · `.dash` 도 같은 문제였다. 같이 고친다)
+
+   폭도 780 → 960 으로 넓힌다. 780px 은 넓은 화면에서 가느다란 띠처럼 보였다.
+   ⚠️ 다만 **무한정 넓히지 않는다.** 글줄이 길어지면 눈이 다음 줄 첫머리를 못 찾는다 —
+     이 앱은 하루 77건을 훑는 화면이라 '읽히는 것' 이 '꽉 차는 것' 보다 우선이다.
+
+   ⚠️⚠️ **`width: 100%` 를 빼면 안 된다.** `.detail-main` 은 그리드 항목인데,
+     그리드 항목에 `auto` 마진을 주면 칸을 채우는 대신 **내용 크기로 쪼그라든다.**
+     실제로 그렇게 넣었다가 재보니 본문이 780 → **680px 으로 줄고** 글칸이 590px 이 됐다 —
+     가운데로 오긴 했는데 **더 좁아졌다.** 넓히려고 한 일이 반대로 간 것이다.
+     `width: 100%` 로 폭을 못박아야 `max-width` 가 상한으로 걸리고 남는 자리를 마진이 나눈다.
+     (일반 블록인 `.admin`·`.notif`·`.dash` 는 이 함정이 없어 마진만 준다) */
+/* ★ 좌우 여백을 변수로 뺀다 (2026-09-16). `.talk` 가 **이 값만큼 밖으로 나갔다가**
+   같은 값으로 안쪽 여백을 줘서 화면 끝까지 칠한다. 한 곳에서 정하면
+   사이드 패널(`.peek`, 16px)에서도 저절로 맞는다. */
+.detail-main { --dm-pad: 28px; padding: 22px var(--dm-pad) 0; width: 100%; max-width: 960px; margin-inline: auto; }
+.detail-side { border-left: 1px solid var(--border); padding: 22px 18px; background: var(--bg-sunken); }
+@media (max-width: 980px) { .detail-side { border-left: none; border-top: 1px solid var(--border); } }
+
+.backlink { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); font-size: var(--fs-12-5); margin-bottom: 14px; }
+.backlink:hover { color: var(--accent-text); }
+
+.dmeta { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.dmeta .id { font-family: var(--mono); font-size: var(--fs-13); font-weight: 600; color: var(--text); }
+h1.dtitle { margin: 0 0 22px; font-size: var(--fs-20); line-height: 1.4; font-weight: 600; letter-spacing: -0.02em; }
+h1.dtitle.none { color: var(--text-faint); font-style: italic; font-weight: 400; }
+
+.sec { margin-bottom: 24px; }
+
+/* ★ **본문과 대화를 나누는 선** (2026-09-16 제보 — *"이슈 본문 내용이랑 코멘트
+   영역이 좀더 구분됐으면"*). 코멘트·변경 이력을 감싸고 바닥을 가라앉힌다.
+
+   ⚠️ `.detail-main` 이 `max-width: 960px` 라 그냥 칠하면 **가운데만 회색**이 된다.
+     좌우 패딩(`--dm-pad`)만큼 밖으로 나갔다가 같은 값으로 안쪽 여백을 준다.
+   ★ 코멘트 카드(`.cmt-item`)는 배경이 `--surface`(흰색)라 회색 바닥 위에서 더 또렷해진다.
+   ★ 아래 여백은 여기가 갖는다 — `.detail-main` 의 `padding-bottom` 을 0 으로 옮겼다.
+     안 그러면 회색 바닥이 끝난 뒤에 흰 띠가 80px 남는다. */
+.talk {
+  background: var(--bg-sunken);
+  border-top: 2px solid var(--border);
+  margin-inline: calc(-1 * var(--dm-pad));
+  padding: 22px var(--dm-pad) 80px;
+}
+.talk > .sec:last-child { margin-bottom: 0; }
+
+/* 답글 접기 (2026-09-16). `<details>` 라 자바스크립트가 없어도 접힌다 */
+.cmt-replies > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 0 5px;
+  font-size: var(--fs-11-5); color: var(--text-dim);
+}
+.cmt-replies > summary::-webkit-details-marker { display: none; }
+.cmt-replies > summary:hover { color: var(--text); }
+.cmt-replies[open] > summary .caret { transform: rotate(90deg); }
+
+/* 답글이 있어 못 지우는 코멘트 — 버튼 자리에 이유를 적는다 */
+.cmt-nodel {
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-11-5); color: var(--text-faint); padding: 3px 0;
+}
+.sec > h2, .side-h {
+  margin: 0 0 8px; font-size: var(--fs-11); font-weight: 600;
+  color: var(--text-faint); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.prose {
+  white-space: pre-wrap; word-break: break-word; line-height: 1.7; font-size: var(--fs-13-5);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px 14px;
+}
+.prose.none { color: var(--text-faint); font-style: italic; }
+
+.note {
+  display: flex; gap: 9px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: var(--r); padding: 10px 12px;
+  font-size: var(--fs-12); line-height: 1.65; color: var(--text-dim); margin-bottom: 12px;
+}
+.note b { color: var(--text); font-weight: 600; }
+.note .ico { flex: none; color: var(--accent-text); margin-top: 1px; display: flex; }
+
+/* 코멘트 규칙은 아래 「코멘트」 절 한 곳에 있다 —
+   여기 있던 옛 정의 셋(.cmt-item · .cmt-head · .cmt-body)은 아래 것이 덮어써서
+   **아무 일도 안 하고 있었다.** 값이 달라(padding 7/11px) 읽는 사람만 헷갈렸다. */
+
+dl.props { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+dl.props > div { display: grid; grid-template-columns: 62px 1fr; gap: 8px; align-items: start; }
+dl.props dt { color: var(--text-faint); font-size: var(--fs-12); padding-top: 1px; }
+dl.props dd { margin: 0; font-size: var(--fs-12-5); word-break: break-word; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.props code { font: 11px/1 var(--mono); }
+.side-sep { height: 1px; background: var(--border); margin: 18px 0; }
+.side-note { font-size: var(--fs-11-5); color: var(--text-faint); line-height: 1.65; }
+
+/* ── 사이드 패널 — 목록을 두고 상세를 본다 (2026-09-16) ──────
+   ★ 인터셉트 라우트(`(.)`)를 쓰지 않는다. 가로채는 라우트는 **형제**여야 하는데
+     `[seq]` 는 `issues` 의 **자식**이라, 거기로 가는 순간 목록이 언마운트되는 게
+     정의상 당연하다. 그래서 목록 화면이 `?peek=` 를 읽어 자기 안에 그린다. */
+
+.listwrap--peek {
+  display: grid;
+  /* 폭은 `--peek-w` 하나가 정하고, 바닥·천장은 CSS 가 잡는다.
+     JS 는 이 변수만 쓴다 — 드래그 중 리렌더가 0인 이유다 (`PeekResizer`). */
+  grid-template-columns: minmax(0, 1fr) clamp(360px, var(--peek-w, 520px), 70vw);
+  align-items: start;
+}
+.peek-list { min-width: 0; }
+
+.peek {
+  position: sticky;
+  /* 상단바 + 툴바 아래에 붙는다. 컬럼 머리줄(`.row-head`)이 쓰는 것과 같은 값 —
+     툴바는 필터가 늘면 두 줄이 되므로 고정값이 아니라 잰 값을 쓴다 (`ToolbarHeight`). */
+  top: calc(var(--h-topbar) + var(--toolbar-h, var(--h-toolbar)));
+  align-self: start;
+  height: calc(100vh - var(--h-topbar) - var(--toolbar-h, var(--h-toolbar)));
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  z-index: 25;
+}
+/* 스크롤은 안쪽이 맡는다. `.peek` 자체가 스크롤하면 손잡이가 같이 흘러가 버린다. */
+.peek-scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+
+/* 2단(본문 + 속성) → 1단.
+   ⚠️ `@media (max-width: 980px)` 로는 **안 된다.** 미디어쿼리가 보는 건 뷰포트인데,
+     패널이 520px 이어도 뷰포트는 1920px 이다. 반드시 `.peek` 스코프로 덮는다. */
+.peek .detail-wrap { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.peek .detail-main { --dm-pad: 16px; padding: 14px var(--dm-pad) 0; max-width: none; }
+.peek .detail-side { border-left: none; border-top: 1px solid var(--border); }
+
+.peek-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.peek-head .backlink { margin-bottom: 0; }
+.peek-x {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--r-sm); color: var(--text-dim);
+}
+.peek-x:hover { background: var(--surface-hover); color: var(--text); }
+
+.peek-missing { padding: 44px 20px; text-align: center; }
+.peek-missing h3 { margin: 0 0 6px; font-size: var(--fs-14); font-weight: 600; color: var(--text); }
+.peek-missing p { margin: 0 0 14px; font-size: var(--fs-12-5); color: var(--text-dim); }
+/* `.btn-primary.sm` 은 `margin-left:auto` 라 가운데 정렬을 깬다 — 여기서만 되돌린다 */
+.peek-missing .btn-primary { margin: 0 auto; }
+
+/* 손잡이. `.peek-scroll` 밖에 두어야 내용과 같이 흘러가지 않는다.
+   (`.peek` 이 sticky = 위치 지정 요소라 absolute 의 기준이 된다) */
+.peek-handle {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 9px;
+  cursor: col-resize; touch-action: none; z-index: 1;
+}
+.peek-handle::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: transparent;
+}
+.peek-handle:hover::after,
+.peek-handle:focus-visible::after,
+:root[data-resizing] .peek-handle::after { background: var(--accent); }
+.peek-handle:focus-visible { outline: none; }
+/* 끄는 동안 글자가 잡히면 드래그가 '선택'이 된다 */
+:root[data-resizing] { user-select: none; cursor: col-resize; }
+
+/* 여는 방식 토글. 어느 쪽이 켜졌는지는 **CSS 가 그린다** —
+   버튼이 상태를 안 들고 있어 서버 렌더와 어긋날 일이 없다 (ThemeToggle 과 같다). */
+.vmode {
+  display: inline-flex; border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); overflow: hidden;
+}
+.vmode button {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 27px; padding: 0 9px; border: 0; background: transparent;
+  color: var(--text-dim); font-size: var(--fs-12-5); white-space: nowrap; cursor: pointer;
+}
+.vmode button:hover { background: var(--surface-hover); color: var(--text); }
+:root[data-issue-view="page"] .vmode .vm-page,
+:root[data-issue-view="panel"] .vmode .vm-panel {
+  background: var(--accent-soft); color: var(--accent-text);
+}
+
+/* 좁은 화면에서는 패널을 쓰지 않는다 — 옆에 세울 자리가 없다.
+   다만 `?peek=` 링크를 받아 열었을 때 **아무것도 안 보이면 안 되므로**,
+   숨기는 대신 목록 아래로 내려 보낸다. (승격 자체를 막는 건 `PeekLinks`) */
+@media (max-width: 980px) {
+  .listwrap--peek { grid-template-columns: minmax(0, 1fr); }
+  .peek {
+    position: static; height: auto;
+    border-left: none; border-top: 1px solid var(--border);
+  }
+  .peek-scroll { height: auto; overflow: visible; }
+  .peek-handle { display: none; }
+  .vmode { display: none; }
+}
+
+/* ════ 관리자 화면 ═════════════════════════════════════════ */
+
+.tab {
+  display: inline-flex; align-items: center;
+  height: 27px; padding: 0 11px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12-5);
+}
+.tab:hover { background: var(--surface-hover); color: var(--text); }
+.tab.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+
+.admin { padding: 22px 24px 80px; max-width: 940px; margin-inline: auto; }
+.admin-sec { margin-bottom: 30px; }
+.admin-sec > h2 {
+  margin: 0 0 8px; font-size: var(--fs-13); font-weight: 600; letter-spacing: -0.01em;
+}
+.admin-hint { margin: 0; font-size: var(--fs-12); color: var(--text-dim); line-height: 1.7; }
+.admin-hint b { color: var(--text); font-weight: 600; }
+
+.cmd {
+  margin: 8px 0; padding: 9px 12px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r); font-family: var(--mono); font-size: var(--fs-12);
+  overflow-x: auto;
+}
+
+.btn-primary {
+  height: 32px; padding: 0 14px; align-self: flex-start;
+  border: none; border-radius: var(--r-sm);
+  background: var(--accent-text); color: var(--accent-fg);
+  font-weight: 600; font-size: var(--fs-12-5); cursor: pointer;
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+/* 비활성은 WCAG 1.4.3 의 대상이 아니지만(inactive UI component), 읽히기는 해야 한다 */
+.btn-primary:disabled { opacity: 0.7; cursor: default; }
+
+.btn-ghost {
+  height: 27px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-dim);
+  font-size: var(--fs-12); cursor: pointer; white-space: nowrap;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent-text); }
+
+.ok-msg {
+  margin: 0; padding: 8px 10px; font-size: var(--fs-12-5);
+  color: var(--accent-text); background: var(--accent-soft);
+  border: 1px solid var(--accent-line); border-radius: var(--r);
+}
+
+/* ── 사용자 관리 (2026-09-28) ── */
+.user-actions { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+.user-reset { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.temp-pw {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--r);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  font-size: var(--fs-12-5); color: var(--text);
+}
+.temp-pw code {
+  font-family: var(--mono); font-size: var(--fs-13); font-weight: 600;
+  letter-spacing: 0.04em; color: var(--accent-text); user-select: all;
+}
+.temp-pw small { flex-basis: 100%; font-size: var(--fs-12); color: var(--text-dim); }
+
+/* ── 의견 (2026-09-28) ── */
+.feedback-form textarea {
+  padding: 9px 11px; font: inherit; line-height: 1.6; color: var(--text);
+  background: var(--bg-sunken); border: 1px solid var(--border-strong);
+  border-radius: var(--r); outline: none; resize: vertical;
+}
+.feedback-form textarea:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fb-list { list-style: none; margin: 0; padding: 0 18px 40px; display: flex; flex-direction: column; gap: 10px; }
+.fb-list li { padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
+.fb-list li.read { opacity: 0.8; }
+.fb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--fs-12-5); }
+.fb-dim { color: var(--text-faint); font-size: var(--fs-12); }
+.fb-page { font-family: var(--mono); font-size: var(--fs-12); color: var(--accent-text); overflow-wrap: anywhere; }
+.fb-body { margin: 8px 0 0; white-space: pre-wrap; font-size: var(--fs-13); line-height: 1.65; color: var(--text); }
+.fb-checked { margin: 6px 0 0; }
+.cnt.fb-new { color: var(--accent-text); font-weight: 600; }
+
+/* ── 팀 추가 폼 ── */
+.team-new {
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px;
+}
+.row-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+.row-fields .field { flex: 0 0 190px; }
+.row-fields .field.grow { flex: 1 1 260px; }
+
+/* ── 색 선택 ── */
+.colorpick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.swatch-preview {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+.swatches { display: flex; gap: 4px; flex-wrap: wrap; }
+.swatch {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid transparent; padding: 0; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { border-color: var(--text); }
+.hex {
+  width: 84px; height: 27px; padding: 0 7px;
+  font-family: var(--mono); font-size: var(--fs-11-5);
+  color: var(--text); background: var(--bg-sunken);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  outline: none;
+}
+.hex:focus { border-color: var(--accent); }
+
+/* ── 팀 목록 ── */
+.team-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.team-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px 14px;
+}
+.team-card.off { opacity: 0.72; }
+.team-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.team-swatch {
+  width: 12px; height: 12px; border-radius: 3px; flex: none;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+.team-edit { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+.team-edit .tname {
+  width: 110px; height: 27px; padding: 0 8px;
+  font: inherit; font-weight: 600; color: var(--text);
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--r-sm); outline: none;
+}
+.team-edit .tdesc {
+  flex: 1 1 150px; min-width: 120px; height: 27px; padding: 0 8px;
+  font: inherit; font-size: var(--fs-12); color: var(--text-dim);
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--r-sm); outline: none;
+}
+.team-edit .tname:hover, .team-edit .tdesc:hover { border-color: var(--border); }
+.team-edit .tname:focus, .team-edit .tdesc:focus {
+  border-color: var(--accent); background: var(--bg-sunken);
+}
+/* 직군 — 코멘트 유형과 답변 주체를 정하는 칸 (2026-09-11) */
+.team-edit .trole {
+  height: 27px; padding: 0 6px; font: inherit; font-size: var(--fs-12);
+  color: var(--text-dim); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+
+.team-members {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: var(--fs-12); color: var(--text-dim);
+}
+.team-members .member { display: inline-flex; align-items: center; gap: 5px; }
+.team-members .none { color: var(--text-faint); font-style: italic; }
+.team-members .cnt { margin-left: auto; color: var(--text-faint); font-size: var(--fs-11-5); }
+
+/* ── 사용자 표 ── */
+.admin-table { width: 100%; font-size: var(--fs-12-5); }
+.admin-table thead th {
+  position: static;
+  background: var(--bg-sunken);
+  padding: 8px 10px;
+}
+.admin-table td { padding: 7px 10px; vertical-align: middle; }
+.admin-table tr.off { opacity: 0.72; }
+.admin-table .uname { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+.admin-table .mono { font-family: var(--mono); font-size: var(--fs-11-5); color: var(--text-dim); }
+.admin-table .num { text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.admin-table .dim { color: var(--text-dim); font-size: var(--fs-11-5); }
+
+/* ── 전이별 Reason 표 (docs/13 §5)
+   글 칸 둘이 들어가 표가 넓다. 좁은 화면에서는 .tablewrap 이 가로로 굴린다. */
+.admin-table.reasons { min-width: 720px; }
+.admin-table.reasons td { padding: 6px 10px; }
+.rs-path { white-space: nowrap; }
+.rs-arrow { color: var(--text-dim); margin: 0 2px; }
+/* 차수 코드 — 읽기 전용. 옆 입력칸과 높이를 맞춘다 */
+.rcode {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 54px; padding: 0 8px; height: 30px;
+  font-family: var(--mono); font-size: var(--fs-11-5); color: var(--text-faint);
+  background: var(--bg-sunken); border: 1px dashed var(--border); border-radius: var(--r-sm);
+}
+.admin-table.reasons input[type="text"],
+.rs-label, .rs-hint {
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: var(--fs-12);
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.rs-label { min-width: 120px; }
+.rs-hint { min-width: 260px; }
+.rs-label:focus, .rs-hint:focus { outline: none; border-color: var(--accent); }
+.btn-ghost.sm { padding: 4px 10px; font-size: var(--fs-11-5); }
+
+/* 종결 화면에서 사유 코드와 Reason 을 같이 받을 때의 안내 (Fixed → Closed) */
+.reason-of {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.reason-of b { display: block; font-size: var(--fs-12); }
+.reason-of span { display: block; margin-top: 2px; font-size: var(--fs-11-5); color: var(--text-dim); }
+.admin-table select {
+  height: 27px; padding: 0 6px;
+  font: inherit; font-size: var(--fs-12); color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  cursor: pointer; outline: none;
+}
+.admin-table select:hover { border-color: var(--accent); }
+.admin-table select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.me-tag {
+  font-size: var(--fs-10); color: var(--accent-text);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: 3px; padding: 0 4px;
+}
+.self-role { font-size: var(--fs-12); color: var(--text-faint); }
+
+.team-tag {
+  font-size: var(--fs-10-5); color: var(--text-dim);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0 5px;
+}
+
+/* ── 이슈 항목 + 상태별 하위 트리 ── */
+
+.navgroup { display: flex; flex-direction: column; }
+
+/* 이슈 줄: 접기 버튼 + 링크 */
+.nav.navrow { padding: 0 8px 0 2px; gap: 2px; }
+.twisty {
+  width: 18px; height: 18px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; padding: 0;
+  color: var(--text-faint); cursor: pointer; border-radius: 3px;
+  transition: transform 0.12s;
+}
+.twisty:hover { background: var(--border); color: var(--text); }
+.twisty.open { transform: rotate(90deg); }
+.navmain {
+  display: flex; align-items: center; gap: 9px;
+  flex: 1; min-width: 0; height: 100%;
+  color: inherit;
+}
+
+/* 하위 트리 */
+.subnav {
+  display: flex; flex-direction: column;
+  margin: 1px 0 6px 19px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.subgroup { display: flex; flex-direction: column; }
+.subcat {
+  font-size: var(--fs-10); font-weight: 600; letter-spacing: 0.06em;
+  color: var(--text-faint); text-transform: uppercase;
+  padding: 8px 7px 3px;
+}
+.subitem {
+  display: flex; align-items: center; gap: 7px;
+  height: 25px; padding: 0 7px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim); font-size: var(--fs-12);
+  text-decoration: none;
+}
+.subitem:hover { background: var(--sidebar-hover); color: var(--text); }
+.subitem.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+/* ★ **꺼진 것·0건도 읽을 수는 있어야 한다** (C-49 · 2026-09-11).
+   `opacity` 로 흐리게 한 자리는 **토큰을 고쳐도 안 바뀐다** — 배경과 합성되기 때문이다.
+   0.45 일 때 실측 **1.84** 로 사실상 안 보였다. 합성 후 3:1 이 되게 올렸다. */
+.subitem.zero { opacity: 0.93; }
+.subitem .sdot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: none;
+}
+.subitem .sdot.all { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-faint); }
+.subitem .sn {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.subitem .sc {
+  /* ★ 읽으라고 있는 숫자다 — faint(보조)가 아니라 dim (C-51) */
+  font-size: var(--fs-11); color: var(--text-dim);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.subitem.on .sc { color: var(--accent-text); }
+
+/* 브랜드 링크 */
+a.sb-brand { border-radius: var(--r-sm); }
+a.sb-brand:hover { background: var(--sidebar-hover); }
+
+/* 작성자 → 담당자 */
+.people { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.people .arrow { color: var(--text-faint); font-size: var(--fs-10); }
+.people > span { display: inline-flex; }
+
+/* 코멘트 작성자 */
+.who-note { color: var(--text-faint); font-size: var(--fs-11); }
+
+/* 프로젝트 설정 미리보기 */
+.preview-box {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 10px 12px;
+}
+.pv-label { font-size: var(--fs-11-5); color: var(--text-faint); }
+.pv-value {
+  font-family: var(--mono); font-size: var(--fs-15); font-weight: 600;
+  color: var(--accent-text);
+}
+.pv-note { font-size: var(--fs-11-5); color: var(--text-faint); margin-left: auto; }
+.admin code {
+  font-family: var(--mono); font-size: var(--fs-11-5);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 4px;
+}
+.admin dl.props .mono { font-family: var(--mono); }
+
+/* ── 목록: 우선순위 (점 → 이름까지) ── */
+:root[data-theme="dark"] .row .pri { color: var(--c-d); }
+.row .pri {
+  /* 색은 `themedText()` 가 테마별로 두 벌 넘긴다 (C-51) */
+  color: var(--c-l);
+  flex: none;
+  width: 86px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-11-5);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ════ 코멘트 ══════════════════════════════════════════════ */
+
+.cmt-list { display: flex; flex-direction: column; gap: 10px; }
+.cmt-thread { display: flex; flex-direction: column; }
+
+.cmt-item {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+}
+.cmt-item.reply {
+  border-left: 2px solid var(--accent-line);
+  border-radius: var(--r-sm);
+}
+.cmt-replies {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 6px 0 0 26px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.cmt-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-12);
+}
+/* ★ 이름은 왼쪽, **시각은 오른쪽 끝** (D-97 · FB-011 6번).
+   예전엔 `.cmt-who` 가 세로로 쌓여 이름 **아래**에 시각이 있었고, 오른쪽 끝은
+   코멘트 유형 배지가 썼다 — 왼쪽 팀 배지와 같은 말이 두 번 뜨던 자리다.
+   변경 이력(`.htime`)·알림(`.nf-time`)이 이미 오른쪽 끝이라 **셋이 같아졌다.** */
+.cmt-name {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-weight: 600; font-size: var(--fs-12-5);
+}
+.cmt-time { margin-left: auto; flex: none; font-size: var(--fs-11-5); color: var(--text-dim); }
+.cmt-body {
+  padding: 12px 13px;
+  white-space: pre-wrap; word-break: break-word;
+  line-height: 1.7; font-size: var(--fs-13);
+}
+/* ★★ **자리가 모자라면 줄을 바꾼다. 찌그러뜨리지 않는다** (D-101 · 2026-09-11).
+   열린 폼이 `flex: 1 1 100%` 로 폭을 다 가져가면, 옆의 `답글` 버튼이 0px 로
+   눌려 **글자가 한 글자씩 세로로 접혔다.** 설정 표가 폰에서 무너지던 것(`A-86`)과
+   같은 종류다 — 그때는 표를 굴리게 했고 여기서는 줄을 바꾸게 한다. */
+.cmt-actions {
+  padding: 0 12px 10px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;
+}
+.cmt-actions > * { flex: none; }
+.reply-btn { white-space: nowrap; }
+
+.reply-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: transparent; color: var(--text-dim);
+  font-size: var(--fs-12); cursor: pointer;
+}
+.reply-btn:hover { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
+
+/* 작성 폼 */
+.cmt-form {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); padding: 12px;
+  margin-bottom: 14px;
+}
+.cmt-form.reply { margin: 8px 12px 12px; background: var(--bg-sunken); }
+.cmt-form-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: var(--fs-12-5); color: var(--text);
+}
+.cmt-form-head .auto-note {
+  margin-left: auto; font-size: var(--fs-11); color: var(--text-faint);
+}
+/* ★★ **`width: 100%` 가 없어서** 브라우저 기본 `cols`(≈370px)로 서 있었다.
+   카드는 1,140px 인데 입력칸이 **3분의 1**만 썼다 — FB-011 2번의 실체가 이것이다.
+   `.cmt-input` 은 `position: relative` 뿐이라 폭을 물려주지 않는다. */
+/* ★★ **입력칸과 거울은 한 규칙이 함께 고른다** (`N-73` · 2026-09-16).
+   따로 적으면 `--fs-13` 을 바꾸는 날 **한쪽만 바뀌고 글자가 통째로 밀린다.**
+   여기 있는 것은 전부 *글자가 어디에 놓이는지*를 정하는 속성이다 —
+   하나라도 빠지면 강조 칩이 글자에서 어긋난다. (`D-95-1` 과 같은 원칙) */
+.cmt-form textarea,
+.cmt-form .cmt-mirror {
+  display: block;
+  width: 100%;
+  font: inherit; font-size: var(--fs-13); line-height: 1.65;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  padding: 9px 11px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  tab-size: 4;
+  scrollbar-gutter: stable;
+  /* 바닥은 두 줄. 그보다 긴 글은 `autosize()` 가 키운다 (이슈 수정 화면과 같은 규칙) */
+  min-height: calc(2 * 1.65em + 18px);
+}
+.cmt-form textarea {
+  color: var(--text);
+  background: var(--bg-sunken);
+  border-color: var(--border-strong);
+  resize: vertical; outline: none;
+}
+/* ★ 거울은 입력칸 **위**에 겹친다. 배경이 투명이라 커서와 안내 글자가 그대로 보이고,
+   아래 글자는 `color: transparent` 라 비쳐 번질 것이 없다.
+   ⚠️ `pointer-events: none` — 없으면 입력칸을 클릭할 수가 없다. */
+.cmt-form .cmt-mirror {
+  position: absolute; inset: 0; z-index: 1;
+  overflow: hidden; pointer-events: none;
+  /* ⚠️ **글자색은 여기가 진짜다.** 입력칸 쪽이 투명이라, 여기까지 투명으로 두면
+     `<mark>` 가 제 색을 가진 **멘션만 보이고 나머지 글이 사라진다.** 실제로 그랬다. */
+  color: var(--text); background: transparent;
+}
+/* 하이드레이션이 끝난 뒤에만 붙는다 (`D-106`) — JS 가 꺼져 있으면 이 줄이 안 걸려
+   입력칸이 제 글자를 그대로 그린다.
+
+   ⚠️ **한글 조합 중에 거울을 숨기지 않는다** (`N-74` 개정 · 2026-09-16).
+     처음엔 조합 중에 입력칸이 제 글자를 그리게 했는데, **한글은 글자마다 조합이
+     시작·종료**되므로 타이핑 내내 거울이 껐다 켜졌다 했다 — 제보:
+     *"한글자 입력할때마다 계속 멘션 배경과 하이라이트가 꺼졌다 켜졌다."*
+     브라우저는 조합 중에도 `input` 을 주므로(`isComposing: true`) 거울은 이미
+     따라오고 있었다. **없어도 되는 보험이 매 글자 깜빡임을 만들고 있었다.** */
+.cmt-form textarea.live { color: transparent; caret-color: var(--text); }
+/* ★ 답글도 **코멘트와 같은 칸**이다 (D-95-2 · 2026-09-11).
+   예전엔 `rows={2}` 에 바닥도 없어서 코멘트의 절반만 했다 —
+   *"코멘트 답글 달 때 입력란이 너무 작아 코멘트처럼 만들어야해"* (FB-011 후속). */
+.cmt-form.reply textarea { background: var(--surface); }
+.cmt-form textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.cmt-form textarea::placeholder { color: var(--text-faint); }
+.cmt-form-foot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+/* 단축키 안내 — 보이는 곳에 적어야 기능이 된다 (D-96) */
+.cmt-hint { margin-right: auto; font-size: var(--fs-11-5); color: var(--text-dim); }
+
+/* 답글 토글 */
+/* ★★ **열리면 폭을 채운다** (`D-95-2` · 2026-09-11).
+   `.cmt-actions` 가 `display:flex` 라 `<details>` 가 **접힌 버튼 너비(≈100px)에
+   맞춰 줄어들어**, 열어도 입력칸이 그 폭 안에 갇혔다 —
+   *"코멘트 답글 달 때 입력란이 너무 작아"* 의 실체가 이것이다.
+   접혔을 때는 버튼 크기 그대로여야 하므로 `[open]` 에만 건다. */
+.reply-wrap { min-width: 0; }
+.reply-wrap[open] { flex: 1 1 100%; }
+
+.reply-wrap > summary {
+  list-style: none;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: transparent; color: var(--text-dim);
+  font-size: var(--fs-12); cursor: pointer;
+}
+.reply-wrap > summary::-webkit-details-marker { display: none; }
+.reply-wrap > summary:hover {
+  border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft);
+}
+.reply-wrap[open] > summary { border-color: var(--accent); color: var(--accent-text); }
+.cmt-form.reply { margin: 8px 0 0; background: var(--bg-sunken); }
+
+/* ── 새 이슈 버튼 ── */
+.btn-new {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 27px; padding: 0 11px;
+  border-radius: var(--r-sm);
+  background: var(--accent-text); color: var(--accent-fg);
+  font-size: var(--fs-12-5); font-weight: 600; white-space: nowrap;
+}
+.btn-new:hover { background: var(--accent-hover); }
+
+/* ════ 이슈 등록 폼 ════════════════════════════════════════ */
+
+.newissue {
+  display: flex; flex-direction: column; gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+}
+.ni-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.newissue .field > span {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-12); font-weight: 500; color: var(--text-dim);
+}
+.newissue .field > span em {
+  font-style: normal; font-weight: 400; font-size: var(--fs-11); color: var(--text-faint);
+}
+.newissue .field > span .req {
+  font-size: var(--fs-10); font-weight: 600; color: var(--accent-text);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: 3px; padding: 0 4px;
+}
+.newissue input,
+.newissue select,
+.newissue textarea {
+  font: inherit; font-size: var(--fs-13); color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  outline: none; width: 100%;
+}
+/* 왼쪽 여백은 같은 줄의 입력칸(10px)과 맞춘다 — 8px 이면 '차수' 와 '검출 버전' 의
+   글씨 시작점이 2px 어긋나 보인다 */
+.newissue select { height: 36px; cursor: pointer; padding: 0 10px; }
+.newissue input { height: 36px; }
+.newissue textarea { resize: vertical; line-height: 1.65; }
+.newissue input:focus,
+.newissue select:focus,
+.newissue textarea:focus {
+  border-color: var(--accent);
+  /* ⚠️ `background` 단축 속성으로 쓰면 안 된다 — 아래에서 넣는 **화살표(배경 이미지)가
+       같이 지워져** 포커스 순간 화살표가 사라진다. 색만 바꾼다. */
+  background-color: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.newissue ::placeholder { color: var(--text-faint); }
+.ni-half { max-width: 220px; }
+
+.ni-foot {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px;
+}
+.ni-auto { margin: 0; font-size: var(--fs-12); color: var(--text-dim); line-height: 1.6; flex: 1; }
+.ni-auto b { color: var(--text); font-weight: 600; }
+.ni-auto span { color: var(--text-faint); font-size: var(--fs-11-5); }
+/* 안내가 두 줄이면 줄을 나눈다 — 붙여 놓으면 한 문장처럼 읽혀서 둘 다 안 읽힌다 */
+.issue-edit .ni-auto { display: flex; flex-direction: column; gap: 3px; }
+.ni-btns { display: flex; gap: 8px; align-items: center; }
+.ni-btns .btn-ghost { display: inline-flex; align-items: center; height: 32px; }
+.ni-btns .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.ni-btns kbd {
+  font-family: var(--mono); font-size: var(--fs-10-5);
+  background: rgb(255 255 255 / 0.18);
+  border-radius: 3px; padding: 1px 4px;
+}
+
+/* ════ 이슈 상세 — 편집 ════════════════════════════════════ */
+
+/* ★ 수정 버튼은 제목 줄에서 **떼어내** 오른쪽 위에 고정한다 (2026-08-24 피드백 4번).
+   예전엔 제목과 한 줄(flex)에 있었고 열리면 `flex: 1 1 100%` 로 부풀어 **줄이 접혔다.**
+   그래서 버튼이 (908,136) → (244,176) 으로 뛰었다 — 실제로 재서 나온 값이다.
+   누른 버튼이 어디로 갔는지 눈으로 쫓을 수 없으면 그건 고장이다. */
+.dedit { position: relative; }
+.dtitle-row {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px;
+  padding-right: 152px;  /* 오른쪽 위 버튼 둘(`삭제`·`수정`)이 제목을 덮지 않게 자리를 비운다 */
+}
+.dtitle-row h1.dtitle { margin: 0; flex: 1; }
+
+.edit-wrap > summary.edit-btn {
+  position: absolute; top: 2px; right: 0; z-index: 2;
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.edit-wrap > summary::-webkit-details-marker { display: none; }
+.edit-wrap[open] > summary { border-color: var(--accent); color: var(--accent-text); }
+
+/* ★ 열면 **읽기 영역이 통째로 숨는다.** 폼에도 있고 아래에도 있던 테스트 경로·기대값이
+   두 벌 보이던 것을 없앤다 — 읽던 자리에서 그대로 고치는 게 된다.
+   `:has()` 는 CSS 라 **자바스크립트가 없어도** 똑같이 동작한다(`<details>` 와 한 짝). */
+.dedit:has(.edit-wrap[open]) .dread { display: none; }
+/* 폼 첫 칸이 고정된 버튼 밑으로 파고들지 않게 자리를 비운다.
+   ⚠️ `margin-top` 으로 하면 안 된다 — 위쪽 마진이 `.dedit` 밖으로 **빠져나가(마진 상쇄)**
+     기준 상자째로 밀려서 고정해 둔 버튼이 26px 아래로 내려간다. 실제로 그랬다.
+     `padding` 은 상쇄되지 않으므로 상자가 움직이지 않는다. */
+.edit-wrap[open] { padding-top: 36px; }
+
+/* 열려 있을 때는 같은 자리에서 닫는 버튼이 된다 */
+.e-lbl { display: inline-flex; align-items: center; gap: 5px; }
+.edit-wrap:not([open]) .e-close { display: none; }
+.edit-wrap[open] .e-open { display: none; }
+
+/* 우측 속성 패널 (편집 가능) */
+dl.props.editable > div { grid-template-columns: 62px 1fr; align-items: center; }
+dl.props.editable dd { gap: 6px; }
+.pf { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pf select {
+  width: 100%; height: 28px; padding: 0 6px;
+  font: inherit; font-size: var(--fs-12-5); color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  cursor: pointer; outline: none;
+}
+.pf select:hover { border-color: var(--border-strong); }
+.pf select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pf select:disabled { opacity: 0.6; }
+/* 저장이 오가는 동안. 못 쓰게 막지는 않는다 — 막으면 연달아 고칠 수가 없다 */
+.pf select.saving { border-color: var(--accent-line); background-color: var(--accent-soft); }
+
+
+/* ════ 드롭다운 화살표 ══════════════════════════════════════
+   *"드롭다운 박스 아래 화살표 위치가 너무 어정쩡해, 너무 우측 테두리에 붙어있어"*
+
+   브라우저가 기본으로 그리는 화살표는 **오른쪽 테두리에 거의 붙여서** 그린다
+   (재보니 칸 오른쪽 끝에서 8px). 칸 안의 글씨는 왼쪽에서 8~11px 떨어져 있는데
+   화살표만 테두리에 붙어 있으니 좌우가 안 맞아 보인다.
+   게다가 그 화살표는 OS 마다 모양이 달라 — 앱의 다른 아이콘들과 굵기도 안 맞는다.
+
+   그래서 기본 화살표를 끄고(`appearance: none`) **우리 아이콘**을 같은 규격으로 그린다.
+   위치는 글씨의 왼쪽 여백과 **같은 값**을 오른쪽에도 줘서 좌우 대칭을 맞춘다.
+
+   ⚠️ `padding-right` 를 같이 줘야 한다. 안 주면 긴 항목의 글씨가 화살표 **밑으로 파고든다.**
+   ⚠️ 이 아래로는 이 선택자들의 `background` 를 **단축 속성으로 다시 쓰지 말 것** —
+     화살표(배경 이미지)가 통째로 지워진다. 색만 바꿀 때는 `background-color`. */
+.newissue select,
+.pf select,
+.bk-form select,
+.tpl-form select,
+.admin-table select,
+.issue-edit select,
+.fsel {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: var(--caret);
+  background-repeat: no-repeat;
+}
+
+/* 큰 칸(높이 36px) — 글씨가 왼쪽에서 10px 이니 화살표도 오른쪽에서 10px
+   ⚠️ `.issue-edit select` 는 **나중에 추가하면서 이 목록에 빠져 있었다** (2026-08-26).
+     기능(IA) 드롭다운만 브라우저 기본 화살표를 쓰고 있었는데, FB-005 로 고친 게
+     바로 그 어긋남이다. **드롭다운을 새로 만들면 이 목록에 넣을 것.** */
+.newissue select,
+.issue-edit select {
+  background-position: right 10px center;
+  background-size: 13px 13px;
+  padding-right: 32px;
+}
+
+/* 작은 칸(높이 27~28px) — 여백을 그대로 쓰면 답답해서 한 단계 좁힌다.
+   좌우를 8px 로 맞춰 놓는다 (원래 6px 과 8px 이 섞여 있었다) */
+.pf select,
+.bk-form select,
+.tpl-form select,
+.admin-table select,
+.fsel {
+  background-position: right 8px center;
+  background-size: 12px 12px;
+  padding-left: 8px;
+  padding-right: 26px;
+}
+
+/* 사유 입력 */
+.notebox {
+  background: var(--bg-sunken);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r);
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.notebox p { margin: 0; font-size: var(--fs-12); line-height: 1.5; color: var(--text-dim); }
+.notebox p b { color: var(--text); }
+.notebox p span { display: block; color: var(--text-faint); font-size: var(--fs-11); margin-top: 3px; }
+.notebox textarea {
+  font: inherit; font-size: var(--fs-12-5); line-height: 1.6; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); padding: 7px 9px; resize: vertical; outline: none;
+}
+.notebox textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.notebtns { display: flex; gap: 6px; justify-content: flex-end; }
+.notebtns .btn-primary, .notebtns .btn-ghost { height: 27px; font-size: var(--fs-12); padding: 0 10px; }
+.login-error.sm { font-size: var(--fs-11-5); padding: 6px 8px; }
+
+/* 본문 편집 폼 */
+.issue-edit {
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--surface); border: 1px solid var(--accent-line);
+  border-radius: var(--r); padding: 16px; margin-bottom: 22px; width: 100%;
+}
+/* 라벨 옆 설명은 등록 화면과 **같은 규격**으로 (11px, 흐리게, 기울임 없이).
+   여기만 12px 기울임이라 라벨 본문과 굵기가 비슷해 어디까지가 이름인지 안 보였다. */
+.issue-edit .field > span {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-12); font-weight: 500; color: var(--text-dim);
+}
+.issue-edit .field > span em {
+  font-style: normal; font-weight: 400; font-size: var(--fs-11); color: var(--text-faint);
+}
+.issue-edit input, .issue-edit textarea {
+  font: inherit; font-size: var(--fs-13); line-height: 1.65; color: var(--text);
+  background: var(--bg-sunken); border: 1px solid var(--border-strong);
+  border-radius: var(--r); padding: 8px 10px; outline: none; width: 100%; resize: vertical;
+}
+.issue-edit input { height: 36px; }
+/* ── 긴 글 칸의 크기 ──────────────────────────────────────────
+   *"진입할 때 기입되어 있는 내용에 맞게 사이즈가 나왔으면 좋겠어.
+     텍스트가 별로 없으면 크기를 통일하도록."*
+
+   예전엔 `rows` 를 4·2·3 으로 **박아** 뒀다. 글 길이와 아무 상관이 없는 숫자라
+   ① 한 줄짜리 글에도 네 줄 칸이 열려 빈 공간이 남고
+   ② 셋의 높이가 제각각이라 **글이 짧을수록 더 어수선해 보였다.**
+
+   → 바닥을 **두 줄로 통일**한다. 글이 짧으면 셋이 정확히 같은 크기가 된다.
+     그보다 길면 여는 순간 자바스크립트가 글에 맞춰 키운다 (IssueEditor 의 `fit`).
+
+   바닥이 왜 두 줄인가 — 세 줄로 두고 재보니 한 줄짜리 글에 **빈 줄이 둘씩** 남아
+   폼이 85px 길어졌다. 타이핑하면 알아서 늘어나므로 바닥을 넉넉히 잡을 이유가 없다.
+
+   ⚠️ `max-height` 로 위를 막지 않는다 — 막으면 **사람이 모서리를 끌어도** 그 이상
+     못 키운다. 자동으로 키우는 쪽만 화면의 0.7 에서 멈추게 해 뒀다(`fit` 의 상한).
+     자동은 적당히, 손으로는 얼마든지. */
+.issue-edit textarea { min-height: calc(2 * 1.65em + 18px); }
+.issue-edit input:focus, .issue-edit textarea:focus {
+  border-color: var(--accent); background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* ── 한 줄에 두 칸 ────────────────────────────────────────────
+   *"텍스트박스 얼라인이 안 맞는다"*
+
+   두 칸을 각각 (라벨 + 입력칸) 세로 묶음으로 쌓아 두면, **한쪽 라벨만 두 줄로 접힐 때**
+   그 칸의 입력칸만 통째로 내려간다. 실제로 '반영 버전' 라벨이 160px 안에서 접혀
+   입력칸이 옆칸보다 **18px 아래**에 있었다 — 재서 나온 값이다.
+
+   `subgrid` 로 **라벨 줄과 입력 줄을 두 칸이 공유**하게 만든다.
+   라벨이 한 줄이든 세 줄이든 입력칸의 윗선은 늘 같은 높이에 선다.
+   (칸 안쪽 간격 5px 은 부모의 row-gap 으로 물려준다 — `.field` 의 flex gap 과 같은 값) */
+.ie-row {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  grid-template-rows: auto auto;
+  column-gap: 12px; row-gap: 5px;
+}
+.ie-row > .field {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+}
+/* 검출/반영 버전은 **같은 종류**의 칸이다. 한쪽만 넓으면 그것부터 눈에 걸린다.
+   반으로 나눠 놓으면 설명도 한 줄에 들어간다 (160px 에서는 두 줄로 접혔다). */
+.ie-row.even { grid-template-columns: 1fr 1fr; }
+.ie-foot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 12px;
+}
+
+/* ── 변경 이력 ── */
+.hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.hist li {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 9px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.hist li:last-child { border-bottom: none; }
+.hbody { flex: 1; min-width: 0; }
+.hline {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-12-5); color: var(--text-dim);
+}
+.hline b { color: var(--text); font-weight: 600; }
+.hfield { color: var(--text-faint); }
+.hchange { display: inline-flex; align-items: center; gap: 5px; }
+.hold { color: var(--text-faint); text-decoration: line-through; }
+.harrow { color: var(--text-faint); font-size: var(--fs-10); }
+.hnew { color: var(--text); font-weight: 500; }
+.htime { margin-left: auto; color: var(--text-faint); font-size: var(--fs-11-5); white-space: nowrap; }
+.hnote {
+  margin-top: 5px; padding: 7px 10px;
+  background: var(--bg-sunken); border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-size: var(--fs-12-5); line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}
+
+/* 켜고 끄는 스위치 */
+.toggle {
+  width: 34px; height: 20px; padding: 0;
+  border: 1px solid var(--border-strong); border-radius: 100px;
+  background: var(--bg-sunken); cursor: pointer;
+  display: inline-flex; align-items: center;
+  transition: background 0.14s, border-color 0.14s;
+}
+.toggle .knob {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text-faint); margin-left: 2px;
+  transition: transform 0.14s, background 0.14s;
+}
+.toggle.on { background: var(--accent); border-color: var(--accent); }
+.toggle.on .knob { transform: translateX(14px); background: #fff; }
+.toggle:hover { border-color: var(--accent); }
+
+/* ════ 첨부파일 ════════════════════════════════════════════ */
+
+/* ★ **업로드 칸은 수정 중일 때만 보인다** (2026-09-16 제보).
+   `.dedit`(수정 폼)과 `첨부` 절은 둘 다 `.detail-main` 의 자식이라 `:has()` 로 닿는다.
+   자바스크립트가 없어도 되고, `<details>` 가 열리는 순간 같이 나타난다.
+
+   ⚠️ 이 선택자가 `Attachments.tsx` 의 `isIssueEditOpen()`·`IssueEditor` 의 `.edit-wrap`
+     **셋과 같은 값을 봐야 한다.** 하나만 바꾸면 "칸은 안 보이는데 ⌘V 는 거기로 간다" 가 된다. */
+.att-upload { display: none; }
+.detail-main:has(.edit-wrap[open]) .att-upload { display: block; }
+
+/* 첨부가 0건이고 수정 중도 아니면 절 자체를 숨긴다 — 제목만 덩그러니 남기지 않는다 */
+.sec--att.empty { display: none; }
+.detail-main:has(.edit-wrap[open]) .sec--att.empty { display: block; }
+
+/* 올리는 영역 */
+.att { display: flex; flex-direction: column; gap: 10px; }
+.dropzone {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; cursor: pointer;
+  border: 1px dashed var(--border-strong); border-radius: var(--r);
+  background: var(--bg-sunken); color: var(--text-dim);
+  font-size: var(--fs-12-5); transition: border-color 0.12s, background 0.12s;
+}
+.dropzone:hover, .dropzone.over {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+}
+.dropzone.busy { opacity: 0.6; cursor: default; }
+.dropzone b { color: var(--text); font-weight: 600; }
+.dropzone.over b, .dropzone:hover b { color: var(--accent-text); }
+.dropzone em {
+  display: block; font-style: normal; font-size: var(--fs-11);
+  color: var(--text-faint); margin-top: 2px;
+}
+
+/* 올라간 것들 */
+.att-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.att-item {
+  position: relative;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); overflow: hidden;
+  width: 168px;
+}
+.att-item:hover { border-color: var(--border-strong); }
+.att-main { display: flex; flex-direction: column; }
+.att-item img {
+  width: 100%; height: 104px; object-fit: cover;
+  display: block; background: var(--bg-sunken);
+}
+.att-file {
+  height: 104px; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-sunken); color: var(--text-faint);
+}
+.att-meta {
+  padding: 7px 9px; display: flex; flex-direction: column; gap: 2px;
+  border-top: 1px solid var(--border);
+}
+.att-name {
+  font-size: var(--fs-12); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-sub { font-size: var(--fs-10-5); color: var(--text-faint); }
+.att-del {
+  position: absolute; top: 5px; right: 5px;
+  width: 20px; height: 20px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; cursor: pointer;
+  background: rgb(0 0 0 / 0.55); color: #fff;
+  opacity: 0; transition: opacity 0.12s;
+}
+.att-item:hover .att-del { opacity: 1; }
+.att-del:hover { background: #dc2626; }
+
+/* ── 아직 안 올린 파일 고르기 (등록·코멘트) ── */
+.picker { display: flex; flex-direction: column; gap: 7px; }
+.dropzone.compact {
+  padding: 7px 10px; font-size: var(--fs-11-5); gap: 7px;
+  border-radius: var(--r-sm);
+}
+.dropzone.compact b { font-weight: 600; }
+
+.picked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.picked li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; font-size: var(--fs-12);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.pf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-size { color: var(--text-faint); font-size: var(--fs-11); flex: none; }
+.picked button {
+  width: 18px; height: 18px; padding: 0; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-faint);
+  border-radius: 3px; cursor: pointer;
+}
+.picked button:hover { background: var(--surface); color: #dc2626; }
+
+/* ── 코멘트에 붙은 첨부 ── */
+.cmt-att {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 13px 12px;
+}
+.cmt-att img {
+  max-width: 190px; max-height: 130px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  display: block; background: var(--bg-sunken);
+}
+.cmt-att img:hover { border-color: var(--accent); }
+.cmt-file {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; font-size: var(--fs-12); color: var(--text-dim);
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.cmt-file:hover { border-color: var(--accent); color: var(--accent-text); }
+.cmt-file span { color: var(--text-faint); font-size: var(--fs-11); }
+
+.h2-sub {
+  display: block; margin-top: 2px;
+  font-size: var(--fs-10-5); font-weight: 400; letter-spacing: 0;
+  text-transform: none; color: var(--text-faint);
+}
+
+/* ── TC 붙여넣기 ── */
+.tcpaste { display: flex; flex-direction: column; gap: 6px; }
+.tcpaste textarea {
+  font: inherit; font-size: var(--fs-12-5); line-height: 1.6;
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--r);
+  padding: 9px 11px; resize: none; outline: none; width: 100%;
+  cursor: text;
+}
+.tcpaste textarea::placeholder { color: var(--text-dim); }
+.tcpaste textarea:focus {
+  border-style: solid; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tc-ok {
+  margin: 0; font-size: var(--fs-12); color: var(--accent-text);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm); padding: 6px 9px;
+}
+.tc-ok span { color: var(--text-dim); }
+
+/* ── 넓은 표를 감싸는 스크롤 컨테이너 ────────────────────────
+   설정 화면의 표들(사용자·상태·전이 규칙)이 이 클래스를 쓰는데
+   정의가 없어서 표가 페이지 전체를 밀어내고 있었다.
+   넓은 콘텐츠는 **자기 컨테이너 안에서** 스크롤해야 한다. */
+.tablewrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* ── 전이 규칙 매트릭스 (설정 → 전이 규칙) ────────────────────
+   세로가 '지금 상태', 가로가 '갈 수 있는 곳'.
+   칸이 많아 글자를 키우면 가로로 넘치므로, 대각선(자기 자신)을 죽여
+   시선이 '어디서 어디로'에 머물게 한다. */
+.admin-table.matrix { font-size: var(--fs-12); border-collapse: collapse; }
+.admin-table.matrix th,
+.admin-table.matrix td { border: 1px solid var(--border); }
+
+.admin-table.matrix .corner {
+  text-align: left; white-space: nowrap; background: var(--bg-sunken);
+  position: sticky; left: 0; z-index: 2;
+}
+.admin-table.matrix .corner .mx-from { display: block; font-weight: 600; color: var(--text); }
+.admin-table.matrix .corner .mx-to { display: block; font-weight: 400; color: var(--text-dim); font-size: var(--fs-11); }
+
+.admin-table.matrix .mx-head { padding: 8px 6px; text-align: center; vertical-align: bottom; }
+.admin-table.matrix .mx-head span {
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap; font-weight: 500; font-size: var(--fs-11-5);
+}
+
+.admin-table.matrix .mx-row {
+  text-align: left; padding: 6px 10px; white-space: nowrap;
+  background: var(--surface); position: sticky; left: 0; z-index: 1;
+  font-weight: 500;
+}
+
+.admin-table.matrix .mx-cell { padding: 0; text-align: center; }
+.admin-table.matrix .mx-cell form { display: block; }
+
+/* 자기 자신으로 가는 칸. 규칙이 아니라 '해당 없음'이라 눌리지 않는다. */
+.admin-table.matrix .mx-self {
+  background: repeating-linear-gradient(
+    -45deg, transparent, transparent 4px,
+    var(--border) 4px, var(--border) 5px
+  );
+}
+
+.mx-btn {
+  width: 100%; min-width: 42px; height: 34px; padding: 0;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-faint); font-size: var(--fs-13); line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+.mx-btn:hover { background: var(--accent-soft); color: var(--accent-text); }
+.mx-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mx-btn.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+.mx-btn.on:hover { background: var(--accent-line); }
+
+.me-tag.off {
+  color: var(--text-faint); background: var(--bg-sunken); border-color: var(--border);
+}
+
+.admin-link { color: var(--accent-text); font-weight: 500; }
+.admin-link:hover { text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-btn { transition: none; }
+}
+
+/* ── 플랫폼 체크박스 (이슈 등록·상세) ──────────────────────────
+   여러 개를 고를 수 있다는 게 한눈에 보여야 한다.
+   드롭다운으로 만들면 "하나만 고르는 것"처럼 읽힌다. */
+/* ════ 체크박스 — 한 벌로 통일 ════════════════════════════
+   ★ 예전엔 자리마다 제각각이었다. 13px·14px·15px 이 섞여 있었고 색은
+     브라우저 기본(`accent-color`)이라 OS 마다 다르게 보였다. 게다가 등록 화면의
+     것은 `.field input` 에 걸려 **높이 36px 짜리 텍스트 칸**으로 그려졌다.
+   ★ 이제 `appearance: none` 으로 직접 그린다. 우리 청록(`--accent`)과 모서리
+     반경을 그대로 쓰므로 버튼·칩·배지와 같은 집안으로 읽힌다.
+   ★ 크기는 **한 곳에서만** 정한다. 자리마다 다시 잡으면 또 어긋난다. */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  flex: none; box-sizing: border-box;
+  /* ★ padding 을 0 으로 못 박는 게 핵심이다. `.newissue input` · `.issue-edit input`
+     같은 자손 규칙이 `padding: 8px 10px` 를 물려주는데, box-sizing 이 border-box 라
+     15px 상자가 22px 로 부풀어 오른다. 여기서 끊지 않으면 화면마다 크기가 달라진다. */
+  width: 15px; height: 15px; margin: 0; padding: 0;
+  display: inline-grid; place-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+/* 체크 표시. 별도 아이콘 없이 clip-path 로 그린다 — 의존성을 늘리지 않는다 */
+input[type="checkbox"]::before {
+  content: "";
+  width: 9px; height: 9px;
+  background: var(--accent-fg);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.3, 1.4);
+}
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:hover:not(:disabled) { border-color: var(--accent); }
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input[type="checkbox"]:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 좁은 자리용. 크기만 줄이고 생김새는 같다 */
+.platbox.sm input[type="checkbox"],
+.bk-plats input[type="checkbox"],
+.tpl-plats input[type="checkbox"] { width: 14px; height: 14px; }
+.platbox.sm input[type="checkbox"]::before,
+.bk-plats input[type="checkbox"]::before,
+.tpl-plats input[type="checkbox"]::before { width: 8px; height: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"], input[type="checkbox"]::before { transition: none; }
+}
+
+.platset { border: 0; padding: 0; margin: 0; }
+.platset legend { padding: 0; }
+.platrow { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+.platbox {
+  /* ★ `PC` 가 `P` / `C` 로 쪼개져 나왔다.
+     한글 줄바꿈용으로 넣은 전역 `overflow-wrap: anywhere` 가 짧은 라벨까지 쪼갠다.
+     칸 이름은 절대 쪼개지면 안 된다 — 좁으면 상자째로 줄바꿈되면 된다. */
+  white-space: nowrap; overflow-wrap: normal;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); background: var(--bg-sunken);
+  font-size: var(--fs-12-5); color: var(--text-dim); cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  user-select: none;
+}
+.platbox:hover { border-color: var(--accent); color: var(--text); }
+.platbox:has(input:checked) {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+  font-weight: 500;
+}
+.platbox:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) { .platbox { transition: none; } }
+
+/* 속성 패널 안의 플랫폼 체크박스는 더 작게. 폭 62px 라벨 옆에 들어가야 한다. */
+.platbox.sm { padding: 3px 8px; font-size: var(--fs-11-5); gap: 5px; }
+.pf.platrow { gap: 5px; }
+
+/* 플랫폼 배지. 시스템·화면과 같은 고정폭 대열에 선다 —
+   폭이 흔들리면 세로 정렬이 무너져서 목록을 훑기 어려워진다. */
+.pill.plat { width: calc(var(--w-plat, 3.2) * 1em + 16px); }
+.pill.plat.none { color: var(--text-faint); }
+@media (max-width: 1130px) { .pill.plat { display: none; } }
+
+/* 다중 선택 드롭다운의 체크 자리. 고정폭이라 항목 이름이 들쭉날쭉하지 않는다. */
+.dd-menu .ddcheck {
+  display: inline-block; width: 12px; color: var(--accent-text); font-weight: 700;
+}
+.dd-menu a.on { color: var(--accent-text); font-weight: 500; }
+
+/* 차수 표의 인라인 편집 행. 칸이 표 안에 들어가야 해서 테두리를 죽인다. */
+/* 차수 한 줄 — 이제 **표의 칸을 그대로** 쓴다 (2026-08-24).
+   폼에는 숨은 칸만 남고, 보이는 입력은 각 `<td>` 안에서 `form=` 으로 붙는다.
+   ⚠️ 예전 `grid-template-columns: 1fr 130px 130px` 는 자식이 넷인데 열이 셋이라
+     `종료` 가 다음 줄로 넘쳤고, 애초에 표의 칸 너비와 무관해 머리글과 어긋났다. */
+.rowform { display: contents; }
+.admin-table .rin {
+  width: 100%; height: 30px; padding: 0 8px;
+  font: inherit; font-size: var(--fs-12-5); color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  outline: none;
+}
+.admin-table .rin[type="date"] { font-size: var(--fs-12); }
+.admin-table .rin:hover { border-color: var(--border-strong); }
+.admin-table .rin:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* 중복 원본 번호. 종결 사유에서 '중복'을 고르면 열린다. */
+/* 상태 변경 자리에서 값을 하나 더 받는 칸 — 원본 이슈 번호 · 반영 버전.
+   ★ 한 줄로 붙이면 긴 placeholder 가 오른쪽으로 넘친다. 이름을 위에 두고 칸을 꽉 채운다. */
+.dupof { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: var(--fs-12); }
+.dupof span { color: var(--text-dim); }
+.dupof input { width: 100%; min-width: 0; }
+
+/* 관련 이슈. 양쪽에서 보인다. */
+.rel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rel-list li { display: flex; align-items: baseline; gap: 5px; font-size: var(--fs-12); flex-wrap: wrap; }
+.rel-list .rel-k { color: var(--text-faint); }
+.rel-list a { color: var(--accent-text); font-family: var(--mono); font-weight: 500; }
+.rel-list a:hover { text-decoration: underline; }
+.rel-list .rel-t {
+  color: var(--text-dim); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-width: 100%;
+}
+
+/* ══ 대시보드 ══════════════════════════════════════════════
+   쓰는 사람이 자기 일로 가는 입구다. 거의 모든 요소가 링크라
+   **눌리는 것처럼 보여야** 한다. 그림은 비율을, 숫자는 정확한 값을 맡는다. */
+.dash { padding: 18px 22px 72px; max-width: 1180px; margin-inline: auto; }
+
+/* ── ① 카드 */
+.dash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; }
+.card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 15px 17px 14px; border: 1px solid var(--border);
+  border-radius: var(--r); background: var(--surface);
+  transition: border-color .12s, box-shadow .12s;
+}
+a.card:hover { border-color: var(--accent); box-shadow: 0 1px 8px var(--accent-soft); }
+.card.lead { background: var(--accent-soft); border-color: var(--accent-line); }
+.card.alert { border-color: #dc262640; }
+.card.flat { background: var(--bg-sunken); }
+.card .c-k { font-size: var(--fs-11-5); color: var(--text-dim); }
+.card .c-v {
+  font-family: var(--mono); font-size: var(--fs-31); font-weight: 600;
+  letter-spacing: -.035em; line-height: 1.15; font-variant-numeric: tabular-nums;
+}
+.card.lead .c-v { color: var(--accent-text); }
+.card.alert .c-v { color: #dc2626; }
+.card .c-h { font-size: var(--fs-11); color: var(--text-faint); margin-top: 1px; }
+.card .c-bar {
+  display: block; height: 4px; border-radius: 2px; background: var(--border);
+  margin: 5px 0 3px; overflow: hidden;
+}
+.card .c-bar i { display: block; height: 100%; background: var(--accent); }
+
+/* ── 패널 */
+/* ★ minmax(430px, …) 만 쓰면 뷰포트가 430px 보다 좁을 때도 430px 을 강제해서
+   화면이 가로로 밀린다. min() 으로 감싸야 좁은 화면에서 한 단으로 접힌다. */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.panel {
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); padding: 16px 18px 18px; margin-top: 12px;
+}
+.dash-grid > .panel { margin-top: 0; }
+.panel h2 { font-size: var(--fs-14); font-weight: 600; margin: 0 0 3px; }
+.p-hint { font-size: var(--fs-12); color: var(--text-dim); margin: 0 0 14px; max-width: 60ch; line-height: 1.6; }
+.dash-none { font-size: var(--fs-12-5); color: var(--text-faint); padding: 10px 0; }
+.p-warn {
+  display: inline-block; margin-top: 12px; font-size: var(--fs-12); color: var(--text-dim);
+  border-bottom: 1px dashed var(--border-strong);
+}
+.p-warn:hover { color: var(--accent-text); border-color: var(--accent); }
+.dash-foot {
+  margin-top: 26px; font-size: var(--fs-11-5); color: var(--text-dim);
+  max-width: 78ch; line-height: 1.7;
+}
+
+/* ── ② 도넛 */
+.donut-row { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.donut { position: relative; width: 132px; height: 132px; flex: none; }
+.donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut-bg { fill: none; stroke: var(--bg-sunken); stroke-width: 15; }
+.donut-arc { fill: none; stroke-width: 15; transition: stroke-width .12s; }
+.donut-arc:hover { stroke-width: 18; }
+.donut-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; pointer-events: none;
+}
+.donut-center .dv { font-family: var(--mono); font-size: var(--fs-22); font-weight: 600; letter-spacing: -.035em; }
+.donut-center .dl { font-size: var(--fs-11); color: var(--text-dim); }
+
+.legend { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 220px; }
+.legend li.zero { opacity: .9; }
+.legend a {
+  display: grid; grid-template-columns: 8px 1fr auto 46px;
+  gap: 8px; align-items: center; padding: 2.5px 6px;
+  border-radius: var(--r-sm); font-size: var(--fs-12);
+}
+.legend a:hover { background: var(--accent-soft); }
+.legend .lg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.legend .lg-v { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.legend .lg-p { font-family: var(--mono); color: var(--text-dim); text-align: right; font-size: var(--fs-11); }
+
+/* ── ③ 사람별 막대
+   순위표로 읽히지 않게: 정렬 고정, 등수 없음, 색은 진행도. */
+.bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+/* ★ 행 전체가 <a> 였는데 <li> 로 바뀌었다 — 막대 조각마다 링크가 달라서
+   (그 사람 × 그 상태) 링크 안에 링크를 넣을 수 없기 때문이다. */
+.bars li {
+  display: grid; grid-template-columns: 108px 1fr 44px 74px;
+  gap: 9px; align-items: center; padding: 3.5px 6px; border-radius: var(--r-sm);
+}
+.bars li:hover { background: var(--accent-soft); }
+.bar-who { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.bar-who:hover .bar-name { text-decoration: underline; }
+.bar-name { font-size: var(--fs-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track {
+  height: 13px; border-radius: 3px; background: var(--bg-sunken);
+  border: 1px solid var(--border); display: flex; overflow: hidden; min-width: 3px;
+}
+/* 조각. 1건짜리도 눌러야 하므로 최소 폭을 준다 — 안 그러면 0.3px 이 되어 못 누른다 */
+.bar-seg { display: block; height: 100%; min-width: 4px; transition: filter .1s; }
+.bar-seg:hover { filter: brightness(1.25) saturate(1.3); }
+.bar-seg + .bar-seg { box-shadow: inset 1px 0 0 rgb(255 255 255 / .55); }
+.bar-done { display: block; height: 100%; background: var(--accent); opacity: .8; }
+.bar-tot { font-family: var(--mono); font-size: var(--fs-11-5); text-align: right; font-variant-numeric: tabular-nums; }
+/* ★ 경고색은 토큰이 없어 리터럴이다. **다크 변종을 안 줘서** 3.38 이었다 (C-51) */
+.bar-open { font-size: var(--fs-11); color: #c2410c; }
+:root[data-theme="dark"] .bar-open { color: #fdba74; }
+.bar-open.zero { color: var(--text-faint); }
+.p-note { margin: 8px 0 0; font-size: var(--fs-11-5); color: var(--text-faint); }
+/* 화면에는 안 보이고 스크린리더·검색에는 잡히는 글자.
+   막대 조각은 색만 있는 링크라 이게 없으면 "빈 링크" 가 된다. */
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ── ④ 겹친 막대 (우선순위·시스템)
+   ★ 클래스 앞을 xb- 로 둔 이유: sb- 는 사이드바가 먼저 쓰고 있다.
+     .sb-label 에 text-transform:uppercase 가 걸려 있어서 'Critical' 이 'CRITICAL' 로 나왔다.
+     같은 파일 안에서 이름이 겹치면 조용히 스타일을 물려받는다. */
+.xbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.xbars li {
+  display: grid; grid-template-columns: 104px 1fr 46px 40px;
+  gap: 9px; align-items: center;
+}
+.xb-label {
+  display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-12);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.xb-label:hover { color: var(--accent-text); }
+.xb-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.xb-track { display: block; height: 14px; }
+.xb-all {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  overflow: hidden; min-width: 3px;
+}
+.xb-open { display: block; height: 100%; opacity: .85; }
+.xb-tot { font-family: var(--mono); font-size: var(--fs-11-5); text-align: right; font-variant-numeric: tabular-nums; }
+.xb-open-n {
+  font-family: var(--mono); font-size: var(--fs-11-5); text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 600;
+  /* 색은 `themedText()` 가 테마별로 두 벌 넘긴다 (C-51) */
+  color: var(--c-l);
+}
+:root[data-theme="dark"] .xb-open-n { color: var(--c-d); }
+.xb-open-n:hover { text-decoration: underline; }
+.xb-open-n.zero { color: var(--text-faint); font-weight: 400; }
+
+/* ── ⑤ 추이 */
+.trend svg { width: 100%; height: auto; overflow: visible; }
+.tr-grid { stroke: var(--border); stroke-width: 1; }
+.tr-ytick, .tr-xtick {
+  font-family: var(--mono); font-size: var(--fs-9); fill: var(--text-faint);
+}
+.tr-ytick { text-anchor: end; }
+.tr-xtick { text-anchor: middle; }
+.tr-area { fill: var(--accent); opacity: .07; }
+.tr-created { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; }
+.tr-closed { fill: none; stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 4 3; stroke-linejoin: round; }
+.tr-dot { stroke: var(--surface); stroke-width: 1.2; }
+.tr-dot.created { fill: var(--accent); }
+.tr-dot.closed { fill: #64748b; }
+.tr-legend { display: flex; gap: 14px; margin-top: 8px; font-size: var(--fs-11-5); color: var(--text-dim); }
+.tr-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.tr-k { width: 14px; height: 2px; border-radius: 1px; }
+.tr-k.created { background: var(--accent); }
+.tr-k.closed { background: #64748b; }
+
+@media (max-width: 760px) {
+  .dash { padding: 14px 14px 60px; }
+  .bars li { grid-template-columns: 84px 1fr 40px; }
+  .bars .bar-open { grid-column: 2 / -1; }
+  .xbars li { grid-template-columns: 80px 1fr 40px 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .card, .donut-arc { transition: none; } }
+
+/* ════ 좁은 화면의 이슈 행 (≤420px) ════════════════════════
+   ★★ **이 블록은 반드시 파일 맨 끝에 있어야 한다.**
+      미디어쿼리는 특이도를 올려주지 않는다. 위쪽에 두면 `.row .pri { width: 74px }`
+      (우선순위 이름까지 보여주는 나중 정의)가 이겨서 **아무 일도 일어나지 않는다.**
+      실제로 여기서 한 번 그렇게 만들었다가 360px 검증에서 잡혔다.
+
+   체크박스가 26px 를 먹으면서 360px 에서 13px 모자랐다.
+   줄일 것은 **우선순위 이름**과 **플랫폼 pill** 이다 —
+   색 점만 남아도 Critical 인지 바로 읽히고, 플랫폼은 시스템·내용보다 덜 급하다.
+   오른쪽 아바타(누가 올렸나 · 누가 맡았나)와 내용은 건드리지 않는다 —
+   한 줄에서 가장 자주 훑는 정보다. */
+/* ★ 좁은 화면에서는 상태를 **점만** 남긴다.
+   이름까지 두면 108px 를 먹어서 이슈 내용이 밀려난다 —
+   768px 에서 내용이 **75px** 까지 눌렸다 (사이드바 300px 가 아직 살아 있는 구간이라 최악이다).
+   그 폭에서 가장 중요한 건 내용이다. 색으로 구분되고, 길게 누르면 title 이 뜬다.
+   상태 **이름**은 900px 위에서 보인다 — 실제 업무는 거기서 한다. */
+@media (max-width: 900px) {
+  .row .st { width: 12px; gap: 0; font-size: 0; overflow: hidden; }
+}
+
+@media (max-width: 420px) {
+  input[type="checkbox"].row-check { margin-left: 8px; }
+  .row { padding: 0 8px 0 5px; gap: 7px; }
+  .row .plat { display: none; }
+  /* ★ 점만 남긴다. `overflow: hidden` 만으로는 안 된다 —
+     글자가 12px 안에서 **세로로 줄바꿈**해서 붉은 얼룩이 된다 (실제로 그렇게 나왔다).
+     `font-size: 0` 으로 글자 자체를 지운다. 점은 크기가 고정이라 살아남는다. */
+  .row .pri { width: 12px; gap: 0; font-size: 0; overflow: hidden; }
+  /* ★ 46px 은 11.5px 글자 기준으로 맞춘 값이었다. 글자를 13.5 로 키우니
+     `PT-2291` 이 **두 줄로 접혔다** (C-56 — 칸 폭은 `--fs-md` 에 종속된다). */
+  .row .id { width: 60px; }
+
+  /* 상단바도 좁다. 제목 옆 건수를 접는다 —
+     없어도 무엇을 보고 있는지는 사이드바·목록이 말해준다. */
+  .topbar .page-sub { display: none; }
+  .topbar .page-title { white-space: nowrap; }
+}
+
+
+/* ════ 모바일 내비게이션 (서랍) ═════════════════════════════
+   ★ 왜 필요했나 — 좁은 화면에서 `.sidebar` 를 숨기기만 했더니 폰에서
+     **대시보드로 갈 방법이 아예 없었다.** 화면에 보이는 링크 123개 중
+     대시보드 링크가 0개였다 (2026-08-24 확인).
+
+   ★ 메뉴를 새로 만들지 않고 **진짜 사이드바를 서랍에 담는다.**
+     넓은 화면에서 `.mnav-drawer` 는 `display: contents` — 껍데기가 사라지고
+     안의 `.sidebar` 가 `.app` 그리드 첫 칸에 그대로 놓인다. 예전과 동일하다.
+     그래서 사이드바를 두 번 그리지 않는다 (`src/components/MobileNav.tsx`). */
+
+.mnav-btn { display: none; }
+.mnav-scrim { display: none; }
+.mnav-drawer { display: contents; }
+
+@media (max-width: 760px) {
+  /* ── 햄버거 ──
+     상단바(.topbar)는 sticky top:0 이라 화면 맨 위에 붙어 있다.
+     버튼도 fixed 로 같은 자리에 두면 어느 화면에서든 상단바 안에 정확히 앉는다.
+     (모든 화면이 .topbar 를 그린다 — PageHeader 또는 관리자 탭) */
+  .mnav-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    position: fixed; top: 0; left: 0; z-index: 60;
+    width: 46px; height: var(--h-topbar);
+    border: 0; background: transparent; color: var(--text-dim);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .mnav-btn:active { color: var(--accent-text); }
+
+  /* ── 뒷배경 ──
+     서랍 밖을 누르면 닫힌다. 폰에서 '뒤로' 만큼 자주 쓰는 동작이다. */
+  .mnav-scrim {
+    display: block;
+    position: fixed; inset: 0; z-index: 70;
+    background: rgb(9 13 13 / 0.44);
+    backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .mnav-scrim.on { opacity: 1; pointer-events: auto; }
+
+  /* ── 서랍 ──
+     ★ `visibility` 를 함께 쓴다. transform 으로 밀어두기만 하면 화면 밖에 있어도
+       **포커스가 잡히고 스크린리더가 읽는다.** 닫힌 메뉴는 없는 것이어야 한다. */
+  .mnav-drawer {
+    display: block;
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 80;
+    width: min(84vw, 300px);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), visibility 0.22s;
+  }
+  .mnav-drawer.on { transform: none; visibility: visible; }
+
+  /* 숨겨 둔 사이드바를 서랍 안에서만 되살린다. 세로로 꽉 채우고 스스로 스크롤한다. */
+  .mnav-drawer .sidebar {
+    display: flex;
+    height: 100%;
+    border-right: 0;
+    overflow-y: auto;
+    /* 노치·홈바를 피한다. 안 하면 로그아웃 버튼이 홈바에 깔린다. */
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* 손가락은 마우스보다 굵다. 메뉴 줄을 키운다. */
+  .mnav-drawer .nav,
+  .mnav-drawer .navmain,
+  .mnav-drawer .subitem { min-height: 38px; }
+
+  /* ★ 상태·차수 목록이 길어서 **대시보드가 화면 밖으로 밀렸다** (top 766px > 화면 664px).
+       서랍은 열렸는데 정작 찾던 메뉴가 안 보이면 고친 게 아니다.
+       목록에 **제 스크롤**을 주면 대시보드·설정이 첫 화면에 남는다.
+       (목록을 지우거나 접어버리지 않는 이유: 상태별 건수는 폰에서도 쓸모가 있다.
+        보이되 자리를 다 차지하지 않게 하는 것이 목적이다.) */
+  .mnav-drawer .subnav {
+    max-height: 38vh;
+    overflow-y: auto;
+    /* 목록 끝까지 내려도 서랍 전체가 따라 밀리지 않게 한다(스크롤 체이닝 차단). */
+    overscroll-behavior: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnav-drawer, .mnav-scrim { transition: none; }
+}
+
+/* ════ 터치 화면의 입력칸 ═══════════════════════════════════
+   ★ iOS 는 폼 요소의 글자가 **16px 미만이면 포커스될 때 화면을 확대한다.**
+     그리고 **확대된 채로 돌아오지 않는다.**
+     로그인 아이디 칸은 13px 인데 `autoFocus` 까지 걸려 있어서,
+     폰으로 들어오는 **첫 화면부터 확대된 상태**로 보였다 (2026-08-24 제보).
+
+   ★ `pointer: coarse` 로 막는 이유 — 좁게 줄인 데스크톱 창까지 16px 이 되면
+     빽빽한 목록의 균형이 깨진다. 확대는 **터치 기기에서만** 일어나는 일이다. */
+@media (pointer: coarse) and (max-width: 760px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: var(--fs-16);
+  }
+
+  /* ⚠️ 위 한 줄로는 **안 먹는다.** 미디어쿼리는 특정도를 올려주지 않는데
+     `.field input:not(…):not(…)` 은 `font: inherit` 로 13px 을 다시 박아버린다.
+     (실제로 첫 시도에서 그대로 13px 이 나왔다 — 브라우저 검증이 잡았다.)
+     그래서 **같은 선택자를 그대로 적어** 이긴다. */
+  .field input:not([type="checkbox"]):not([type="radio"]),
+  .field select,
+  .field textarea,
+  .searchwrap input,
+  .issue-edit input,
+  .issue-edit textarea {
+    font-size: var(--fs-16);
+  }
+
+  /* 16px 이 28px 칸에 들어가면 답답하다. 검색칸만 키운다
+     (`.field input` 은 이미 36px 이라 그대로 둔다). */
+  .searchwrap input { height: 34px; }
+}
+
+
+/* ════ 저장했다는 말 (토스트) ═══════════════════════════════
+   *"저장 클릭시 내용은 저장되는데 저장되었다는 알림이나 그런게 없네"* (피드백 2번).
+   화면이 바뀌지 않는 저장은 안 된 것과 구분이 안 된다. */
+.toast-host {
+  position: fixed; z-index: 90;
+  right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;   /* 뒤에 있는 것을 가리기만 하고 누르는 것은 막지 않는다 */
+}
+.toast {
+  display: flex; align-items: center; gap: 8px;
+  max-width: min(360px, calc(100vw - 36px));
+  padding: 9px 13px 9px 11px;
+  font-size: var(--fs-12-5); line-height: 1.5; color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  animation: toast-in 150ms ease-out;
+}
+.toast .ti { display: inline-flex; flex: none; color: var(--accent-text); }
+.toast.error { border-left-color: #dc2626; }
+.toast.error .ti { color: #dc2626; }
+:root[data-theme="dark"] .toast.error { border-left-color: #fca5a5; }
+:root[data-theme="dark"] .toast.error .ti { color: #fca5a5; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 움직임을 줄이라고 한 사람에게는 움직이지 않는다 */
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
+/* 좁은 화면에서는 아래 가운데로. 오른쪽 구석은 엄지가 닿는 자리다 */
+@media (max-width: 760px) {
+  .toast-host { right: 12px; left: 12px; align-items: stretch; }
+  .toast { max-width: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   고객사 이슈리스트 임포트 (FR-907 · docs/피드백 FB-009)
+
+   ★ 이 화면의 표는 **열이 몇 개인지 코드가 모른다.** 고객사 파일이 정한다
+     (실제로 16열짜리와 32열짜리를 같이 받았다). 그래서 폭을 고정할 수 없고,
+     가로 스크롤을 전제로 짠다.
+   ═══════════════════════════════════════════════════════════ */
+
+.imp-head { display: flex; align-items: center; gap: 12px; }
+.imp-head h2 { margin: 0; }
+.imp-head-btns { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.imp-head .btn-new { margin-left: auto; }
+
+.imp-note { margin-top: 10px; }
+.imp-dim { color: var(--text-faint); }
+.imp-src { font-size: var(--fs-12-5); color: var(--text-dim); }
+.imp-meta { line-height: 1.7; }
+
+.imp-err {
+  margin-top: 12px; padding: 9px 12px;
+  border: 1px solid #dc262850; border-radius: var(--r);
+  background: #dc26260f; color: #b91c1c; font-size: var(--fs-13);
+}
+:root[data-theme="dark"] .imp-err { color: #fca5a5; }
+
+/* ── 업로드 마법사 ───────────────────────────────────────── */
+
+.imp-wiz { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.imp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.imp-actions .admin-hint { margin: 0; }
+.imp-back { font-size: var(--fs-12-5); }
+
+/* 파일 고르기. `<input type=file>` 을 감춰 라벨 전체가 과녁이 된다 —
+   첨부의 dropzone 과 같은 생각이다. */
+.imp-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 26px 18px; cursor: pointer; text-align: center;
+  border: 1.5px dashed var(--border-strong); border-radius: var(--r);
+  background: var(--bg-sunken); color: var(--text-dim);
+}
+.imp-drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+.imp-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.imp-drop:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.imp-drop-ico { color: var(--accent-text); }
+.imp-drop-t { font-size: var(--fs-13-5); font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.imp-drop-s { font-size: var(--fs-12); color: var(--text-faint); }
+
+.imp-file { font-size: var(--fs-13); color: var(--text-dim); margin: 0; }
+.imp-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: minmax(220px, 2fr) minmax(200px, 2fr) 130px 150px;
+}
+@media (max-width: 900px) { .imp-grid { grid-template-columns: 1fr 1fr; } }
+.imp-grid select {
+  height: 36px; padding: 0 30px 0 10px; font: inherit; color: var(--text);
+  background: var(--bg-sunken) var(--caret) no-repeat right 8px center / 16px;
+  border: 1px solid var(--border-strong); border-radius: var(--r);
+  appearance: none; outline: none;
+}
+.imp-grid select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.imp-num input { width: 100%; }
+
+/* 미리보기 표. 헤더 줄과 데이터 시작 줄을 색으로 구분한다 —
+   숫자만 적어 두면 자기가 무엇을 골랐는지 확인할 길이 없다. */
+.imp-prev { max-height: 420px; overflow: auto; }
+/* 폭은 아래 `.imp-table table, .imp-prev table` 한 곳에서 정한다 (IM-40) */
+.imp-rn {
+  width: 44px; text-align: right; color: var(--text-faint);
+  font-variant-numeric: tabular-nums; font-size: var(--fs-12);
+}
+.imp-mark { width: 132px; white-space: nowrap; }
+.imp-tag {
+  font: inherit; font-size: var(--fs-11-5); padding: 2px 7px; margin-right: 4px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-dim); cursor: pointer;
+}
+.imp-tag:hover { border-color: var(--accent); color: var(--text); }
+.imp-tag[aria-pressed="true"] {
+  background: var(--accent-text); border-color: var(--accent-text); color: var(--accent-fg); font-weight: 600;
+}
+.imp-r-head > td { background: var(--accent-soft); }
+.imp-r-first > td { box-shadow: inset 0 2px 0 var(--accent); }
+
+/* 셀은 두 줄까지만. 고객사 파일의 코멘트 칸은 2,900자짜리도 있어서
+   그대로 두면 한 행이 화면을 다 먹는다.
+   ★★ **줄 자르기는 `<td>` 가 아니라 안쪽 `<span>` 에 건다** (2026-09-03).
+      `td` 에 `display:-webkit-box` 를 주면 그 칸이 **더는 표의 칸이 아니게 되어**
+      한 줄에 가로로 서지 못하고 **세로로 쌓인다.** 16열짜리 고객사 목록이
+      통째로 한 줄짜리 세로 목록으로 무너져 있었다 (`IM-39`). */
+.imp-cell { max-width: 340px; min-width: 120px; vertical-align: top; }
+.imp-clamp {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* ★ 열이 많으면 **좁히지 말고 가로로 굴린다** (`IM-40`).
+   `width:100%` 만 있으면 16열이 컨테이너에 욱여넣어져 머리글이
+   **한 글자씩 세로로** 접힌다. 실물 고객사 파일이 16열이라 바로 드러났다. */
+.imp-table table, .imp-prev table { width: max-content; min-width: 100%; }
+.imp-table thead th, .imp-prev thead th { white-space: nowrap; }
+
+/* ── 목록 화면 ───────────────────────────────────────────── */
+
+.imp-search { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.imp-search input {
+  height: 34px; padding: 0 11px; min-width: 220px; font: inherit; color: var(--text);
+  background: var(--bg-sunken); border: 1px solid var(--border-strong);
+  border-radius: var(--r); outline: none;
+}
+.imp-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.imp-table { max-height: 68vh; overflow: auto; }
+.imp-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+
+/* ── 열 설정 ─────────────────────────────────────────────── */
+
+.imp-cols { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.imp-cols .field { max-width: 380px; }
+
+/* 고른 결과를 순서대로. 표를 안 봐도 어떤 표가 나올지 알 수 있게 한다. */
+.imp-chosen {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--bg-sunken);
+}
+.imp-chosen-l { font-size: var(--fs-12); color: var(--text-dim); font-weight: 600; margin-right: 4px; }
+.imp-chosen-n {
+  font-size: var(--fs-10-5); color: var(--text-faint); font-variant-numeric: tabular-nums;
+}
+.imp-coltable td { vertical-align: middle; }
+.imp-coltable input[type="text"], .imp-coltable td input:not([type="checkbox"]) {
+  width: 100%; height: 30px; padding: 0 8px; font: inherit; font-size: var(--fs-12-5);
+  color: var(--text); background: var(--bg-sunken);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm); outline: none;
+}
+.imp-coltable td input:not([type="checkbox"]):focus {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
+}
+/* 안 고른 열은 흐리게 두되 **지우지 않는다** — 다시 켤 수 있다는 게 보여야 한다 */
+.imp-off > td { opacity: 0.7; }
+.imp-move { white-space: nowrap; }
+.imp-move button {
+  width: 26px; height: 26px; font: inherit; line-height: 1; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-dim);
+}
+.imp-move button:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.imp-move button:disabled { opacity: 0.55; cursor: default; }
+.imp-srch { font-size: var(--fs-12-5); color: var(--text-dim); overflow-wrap: anywhere; }
+.imp-samples { display: flex; flex-wrap: wrap; gap: 4px; }
+.imp-sample {
+  font-size: var(--fs-11-5); padding: 1px 6px; color: var(--text-dim);
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--r-sm);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.imp-danger {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 26px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r);
+  font-size: var(--fs-12-5); color: var(--text-dim);
+}
+.imp-danger button { margin-left: auto; }
+
+/* ── 이슈 대량등록 (2026-09-16 · 팀장 지시) ────────────────
+   세 걸음(대상 → 매핑 → 미리보기)을 한 화면에 세로로 둔다. 셋이 서로를 보기 때문이다 —
+   대상 프로젝트가 바뀌면 고를 수 있는 우선순위가 바뀌고, 매핑이 바뀌면 건수가 바뀐다. */
+
+.imp-step {
+  margin: 30px 0 10px; padding-top: 16px; font-size: var(--fs-14);
+  border-top: 1px solid var(--border);
+}
+.imp-step:first-of-type { border-top: 0; padding-top: 0; }
+
+.imp-target, .imp-commit {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+}
+.imp-commit { align-items: center; }
+.imp-commit .admin-hint, .imp-target .admin-hint { margin: 0; }
+/* 오류·안내는 줄을 통째로 쓴다. 플렉스 한 줄에 끼면 버튼 옆에서 한 글자씩 접힌다. */
+.imp-wide, .imp-target .imp-err, .imp-commit .imp-err,
+.imp-target .ok-msg, .imp-commit .ok-msg { flex-basis: 100%; }
+
+/* 드롭다운은 마법사(`.imp-grid select`)와 같은 모양으로. 화면마다 다르면
+   같은 일을 하는 칸인 줄 모른다. */
+.imp-target select, .imp-maptable select {
+  height: 34px; padding: 0 30px 0 10px; font: inherit; font-size: var(--fs-12-5);
+  color: var(--text); background: var(--bg-sunken) var(--caret) no-repeat right 8px center / 16px;
+  border: 1px solid var(--border-strong); border-radius: var(--r);
+  appearance: none; outline: none; max-width: 100%;
+}
+.imp-target select:focus, .imp-maptable select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.imp-map { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.imp-maptable td { vertical-align: top; }
+.imp-maptable select { width: 100%; }
+.imp-req { color: #991b1b; font-weight: 700; }
+:root[data-theme="dark"] .imp-req { color: #fca5a5; }
+.imp-fhint { font-size: var(--fs-11-5); margin-top: 3px; }
+.imp-bad { color: #991b1b; }            /* 흰 바탕 8.35 — AAA */
+:root[data-theme="dark"] .imp-bad { color: #fca5a5; }
+
+/* 못 맞춘 값. **왼쪽이 엑셀 원문, 오른쪽이 우리 값**이라는 게 한눈에 보여야 한다. */
+.imp-unmatched {
+  margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--bg-sunken);
+}
+.imp-pair { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.imp-raw {
+  min-width: 120px; max-width: 240px; font-size: var(--fs-12-5); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.imp-pair select { flex: 1; min-width: 150px; }
+
+.imp-fails { margin-top: 20px; font-size: var(--fs-12-5); color: var(--text-dim); }
+.imp-fails h4 { margin: 0 0 6px; font-size: var(--fs-13); color: var(--text); }
+.imp-fails ul { margin: 0; padding-left: 18px; line-height: 1.8; }
+
+/* ── 좁은 화면에서 설정 표가 세로로 무너지던 것 (A-85 · 2026-09-11) ────────
+   `IM-40` 에서 **가져온 목록** 표에 이미 배운 것을 설정 표에는 안 걸어 뒀었다.
+
+   `.admin-table { width: 100% }` 은 열이 몇 개든 컨테이너에 **욱여넣는다.**
+   폰 폭(390px)에서 열이 6~7개면 한 열이 20px 남짓이 되어,
+     · 머리글 `이름` 이 `이` / `름` 으로 접히고
+     · 코드가 `CRITI` / `CAL`,  건수가 `1` / `,` / `0` / `9` / `2` 로 **세로로 쌓이고**
+     · 아이디가 `p/t/./v/e/r/i/f/y` 한 글자씩 내려가 한 줄이 300px 가 된다
+   실제로 `설정 › 우선순위·환경·시스템·플랫폼·차수` 와 `전역 › 사용자·프로젝트`
+   전부 그 상태였다 (2026-09-11 점검).
+
+   ★ 좁히지 말고 **가로로 굴린다.** `.tablewrap` 은 이미 감싸고 있었다 —
+     표가 `width:100%` 라 굴릴 것이 없었을 뿐이다.
+   ★ 넓은 화면은 건드리지 않는다. 거기서는 지금 모양이 맞다 (20화면 확인). */
+@media (max-width: 760px) {
+  .admin-table { width: max-content; min-width: 100%; }
+  .admin-table th,
+  .admin-table td { white-space: nowrap; }
+  /* 입력칸이 `width:100%` 라 max-content 안에서 0 으로 수축한다. 바닥을 준다. */
+  .admin-table .rin { min-width: 120px; }
+  .admin-table .rin[type="date"] { min-width: 140px; }
+  /* 전이 매트릭스는 이미 자기 최소폭이 있다 — 그대로 둔다 */
+  .admin-table.matrix { width: max-content; }
+}
+
+/* ── 첨부 — 그 외 파일 리스트 (D-64 · 2026-09-11) ──────────────────────
+   이미지는 위 격자에서 미리보기로, 문서·압축 파일은 여기 **한 줄씩** 선다.
+   섞어 두면 스크린샷을 훑을 때 문서 카드를 건너뛰며 봐야 한다. */
+.att-files { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+/* ★ **카드가 아니라 한 줄이다** (D-64-1 · 2026-09-11).
+   처음엔 테두리+배경+패딩을 준 카드였는데 한 줄이 34px 를 먹었다 —
+   *"칸이 너무 커서 별로야. 파일 이름이랑 그런거만 딱 보이게"*.
+   테두리를 걷어내고 24px 줄로 만든다. 올린 사람은 `title` 로 내린다. */
+.att-row {
+  display: flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 4px; border-radius: var(--r-sm);
+}
+.att-row > a {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  color: var(--text); text-decoration: none;
+}
+.att-row:hover { background: var(--surface-hover); }
+/* ★ 리스트 줄의 아이콘은 **자기 클래스**를 쓴다 (D-64-2).
+   `.att-file` 은 격자용 104px 타일이라 그걸 물려받으면 줄 뒤에 회색 상자가 깔린다. */
+.att-row .att-ico { flex: none; display: flex; align-items: center; color: var(--text-dim); }
+.att-row .att-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); }
+.att-row .att-sub { flex: none; font-size: var(--fs-11); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* 삭제는 호버에서만 — 첨부 격자(.att-del)와 같은 방식 */
+.att-row .att-del { opacity: 0; }
+.att-row:hover .att-del, .att-row:focus-within .att-del { opacity: 1; }
+
+/* ── 상태 변경 사유 패널이 화면 밖으로 나가던 것 (D-99 · 2026-09-11) ──────
+   ⚠️ **코멘트 입력란과 똑같은 원인이었다.** `.notebox textarea`·`select` 에
+   폭이 없어 브라우저 기본 크기(≈161px)로 서고, 그걸 감싼 `dd` 가
+   **줄어들 수 없어서** 오른쪽 사이드바를 41px 밀고 나갔다.
+   `확인` 버튼이 화면 밖으로 잘려 **눌러야 할 것을 못 누른다.**
+
+   ★ 폭은 물려주고(`width:100%`), 줄어들 수 있게(`min-width:0`) 한다.
+     `min-width:0` 이 없으면 flex/grid 항목은 **내용보다 작아지지 않는다** —
+     이게 "왜 안 줄어들지" 의 답이고, 사이드바 전체에 걸어 둔다. */
+dl.props dd, dl.props dt { min-width: 0; }
+.notebox, .notebox form, form.pf { min-width: 0; }
+.notebox textarea,
+.notebox select,
+.notebox input { width: 100%; min-width: 0; max-width: 100%; }
+.notebtns { flex-wrap: wrap; }
+
+/* 코멘트 수정 · 고친 표시 (D-100) */
+.cmt-edited {
+  margin-right: 6px; padding: 1px 5px; border-radius: 3px;
+  background: var(--accent-soft); color: var(--accent-text);
+  font-size: var(--fs-10-5); font-weight: 500;
+}
+
+/* ── 코멘트 인라인 편집 · 삭제 확인 (D-100 개정 · D-102 · 2026-09-11) ─────── */
+
+/* 편집 폼은 **본문 자리**에 선다 — 카드 안쪽이라 테두리를 다시 두르지 않는다 */
+.cmt-form.cmt-inline {
+  border: 0; border-radius: 0; margin: 0;
+  padding: 10px 13px 12px; background: transparent;
+}
+.cmt-form.cmt-inline textarea { background: var(--bg-sunken); }
+
+/* 삭제 — 무엇이 사라지는지 먼저 말하고, 한 번 더 눌러야 지워진다 */
+.del-wrap[open] { flex: 1 1 100%; }
+.reply-btn.del:hover,
+.del-wrap[open] > summary { border-color: #dc2626; color: #dc2626; background: transparent; }
+:root[data-theme="dark"] .reply-btn.del:hover,
+:root[data-theme="dark"] .del-wrap[open] > summary { border-color: #fca5a5; color: #fca5a5; }
+.del-box {
+  margin-top: 8px;
+  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+}
+.del-box p { margin: 0; flex: 1; min-width: 0; }
+.del-btns { flex: none; }
+.btn-ghost.danger { border-color: #dc2626; color: #dc2626; }
+.btn-ghost.danger:hover { background: #dc262614; }
+:root[data-theme="dark"] .btn-ghost.danger { border-color: #fca5a5; color: #fca5a5; }
+:root[data-theme="dark"] .btn-ghost.danger:hover { background: #fca5a51f; }
+
+/* ── 상태 변경 팝오버 (D-103 · 2026-09-11) ────────────────────────────────
+   ⚠️ 예전엔 사이드바 값 칸(실폭 140px) **안에** 그렸다. 설명문·사유·반영 버전·
+   textarea·버튼 둘이 전부 거기 들어가니 칸마다 두 글자씩 접히고 `확인` 이 화면
+   밖으로 나갔다 (`D-99` 로 넘침만 막았을 뿐 **좁은 건 그대로**였다).
+
+   ★ **자리를 넓히는 게 아니라 자리에서 벗어난다.** 누른 칸에 붙어 있으니 맥락은
+     안 끊기고, 폭은 360px 로 2.5배가 된다. 오른쪽 사이드바라 **왼쪽으로** 편다. */
+.notebox.popover {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 70;
+  width: 360px; max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+}
+/* 팝오버의 기준 상자 — 상태 칸의 폼 */
+form.pf { position: relative; }
+
+/* 무엇이 어디로 바뀌는지를 머리에 (D-103-1)
+   ⚠️ 이름을 `nb-*` 로 지었다가 **알림 벨(`.nb-head`)과 겹쳐** 벨의
+   `justify-content: space-between` 을 물려받아 글자가 양 끝으로 벌어졌다.
+   ★ **클래스 이름은 짓기 전에 이미 쓰는지 본다** (두 번째로 밟았다 — `cmt-edit-wrap` 도 같은 일). */
+.stx-head { display: flex; align-items: center; gap: 7px; font-size: var(--fs-13); }
+.stx-head b { color: var(--text); font-weight: 600; }
+.stx-arrow { color: var(--text-dim); }
+.stx-why b { display: block; }
+.stx-why span { display: block; color: var(--text-dim); font-size: var(--fs-11-5); margin-top: 3px; }
+
+.stx-head { justify-content: flex-start; }
+/* 팝오버 안에서는 칸이 넓으니 라벨과 값을 한 줄로 */
+.notebox.popover .dupof { flex-direction: row; align-items: center; gap: 8px; }
+.notebox.popover .dupof > span { flex: none; width: 96px; color: var(--text-dim); font-size: var(--fs-12); }
+.notebox.popover .dupof input { flex: 1; min-width: 0; }
+.notebox.popover textarea { min-height: 64px; }
+
+@media (max-width: 760px) {
+  /* 좁은 화면에서는 화면 폭에 맞춘다 */
+  .notebox.popover { right: auto; left: 0; width: min(360px, calc(100vw - 32px)); }
+}
+
+/* ── ~~상세 오른쪽 속성 값 가운데 정렬~~ → **되돌림** (2026-09-12) ──────────
+   `D-104` 는 *"PC · 테스트 웹 · 이슈작성화면 이렇게 뜨는 부분 텍스트 다 가운데로"*
+   라는 제보를 받아 넣은 것이었다. **그런데 그 말은 '목록의 칸' 이야기였다** —
+   `PC`·`테스트 웹` 은 목록 한 줄에 나란히 뜨는 칸 이름이다. 상세 패널이 아니라.
+   엉뚱한 화면을 고쳐 놓고 고쳤다고 한 셈이다.
+   → 가운데 정렬은 **목록의 칸**(`.pill.plat/.sys/.env`)으로 옮겼고, 여기는 원래대로 왼쪽이다. */
+
+/* ══ 지라 연동 (2026-09-21 · docs/11 14절) ══════════════════
+   ★ **색을 새로 만들지 않는다.** 글자색은 전부 이미 전수 측정을 통과한 토큰
+     (`--text` · `--text-dim` · `--text-faint` · `--accent-text`)만 쓴다 —
+     `C-50-1` 에서 배운 것: 상태 배지처럼 **토큰 밖의 색**을 쓰는 순간
+     전수 검증이 미달을 집어낸다.
+   ★ 글자 크기도 토큰만 쓴다 (`C-53` — px 를 새로 박지 않는다). */
+
+/* 켜짐/꺼짐 한 줄. 설정 화면 맨 위에서 **지금 상태를 먼저** 말한다 */
+.jira-state {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r); font-size: var(--fs-12-5);
+}
+.jira-state form { margin-left: auto; }
+.jira-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--text-faint); flex: none;
+}
+.jira-dot.on { background: var(--accent); }
+
+/* 우선순위 짝짓기 — 우리 등급마다 한 칸 */
+.jira-pri { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: var(--fs-12); color: var(--text-dim); font-weight: 500; }
+.jira-pri-rows {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; margin-top: 4px;
+}
+
+/* ── 이슈 상세의 지라 상자 ── */
+.jira-linked, .jira-send { display: flex; flex-direction: column; gap: 7px; }
+.jira-key {
+  font-family: var(--mono); font-size: var(--fs-13);
+  font-weight: 600; color: var(--accent-text);
+}
+.jira-linked a.jira-key:hover { text-decoration: underline; }
+
+/* ★ `<details>` 는 **줄을 바꿔서** 놓는다. 버튼 줄 안에 두면 열릴 때
+   옆 버튼을 0px 로 찌그러뜨린다 — `D-98`(답글 세로 접힘)과 같은 고장이다. */
+.jira-relink { display: block; }
+.jira-relink > summary { display: inline-flex; cursor: pointer; }
+.jira-relink form {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 7px;
+}
+.jira-relink input {
+  height: 32px; padding: 0 10px; width: 100%;
+  font: inherit; font-family: var(--mono); color: var(--text);
+  background: var(--bg-sunken); border: 1px solid var(--border-strong);
+  border-radius: var(--r); outline: none;
+}
+.jira-relink input:focus {
+  border-color: var(--accent); background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.jira-send > form { display: flex; flex-direction: column; gap: 8px; }
+
+/* 보낼 내용(JSON). **미리보기는 증거다** — 접어 두지만 길이를 숨기지 않는다 */
+.jira-preview > summary {
+  cursor: pointer; font-size: var(--fs-12); color: var(--text-dim);
+}
+.jira-preview pre {
+  margin: 7px 0 0; padding: 9px 10px; max-height: 320px; overflow: auto;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--r);
+  font-family: var(--mono); font-size: var(--fs-11-5); color: var(--text-dim);
+  line-height: 1.6; white-space: pre;
+}

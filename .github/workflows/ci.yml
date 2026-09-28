@@ -1,0 +1,24 @@
+# 푸시할 때마다 — lint · 타입 검사 · 빌드. DB 는 필요 없다.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # prisma.config.ts 가 이 변수를 읽기만 한다 (접속은 안 한다). 형식만 맞으면 된다.
+    env:
+      DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build

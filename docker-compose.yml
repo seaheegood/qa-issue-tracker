@@ -1,0 +1,49 @@
+# 로컬 개발용 MySQL.
+#
+# 왜 Docker인가:
+#   - PC에 MySQL을 직접 설치하면 지우기 어렵고, 버전이 사내 서버와 달라지기 쉽다.
+#   - 컨테이너는 `docker compose down -v` 한 줄로 완전히 지워진다.
+#   - 나중에 사내 서버에 배포할 때 "이거 어떻게 켜요?"가 안 나온다 (docs/00 3-2).
+#
+# 사용법:
+#   docker compose up -d     # 켜기
+#   docker compose down      # 끄기 (데이터는 남음)
+#   docker compose down -v   # 끄고 데이터까지 삭제
+
+# ⚠️ 이름의 `pt` 는 예전 이름 ProjectTracker 의 흔적이다 (2026-09-16 에 IssueTracker 로 바뀜).
+#    환경변수(`IT_*`)와 쿠키는 2026-09-28 에 정리했지만 **컨테이너·볼륨 이름은 일부러 그대로 둔다.**
+#    볼륨 이름(`qait-mysql-data`)을 바꾸면 Docker 가 **빈 DB 를 새로 만든다** — 데이터가 사라진 것처럼 보인다.
+#    스크립트는 `IT_DB_CONTAINER`(기본 `qait-mysql`)로 이 이름을 찾는다.
+services:
+  db:
+    image: mysql:8.4
+    container_name: qait-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ptroot
+      MYSQL_DATABASE: issuetracker
+      MYSQL_USER: pt
+      MYSQL_PASSWORD: ptpass
+      TZ: Asia/Seoul
+    ports:
+      # 3307(내 PC) → 3306(컨테이너 안).
+      # 나중에 PC에 MySQL을 직접 설치해도 포트가 겹치지 않게 3307을 쓴다.
+      - "3307:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      # 한글 전문검색(FULLTEXT)용 파서. 한글은 띄어쓰기 단위로 잘라선 검색이 안 되므로
+      # 2글자씩 잘라 색인하는 ngram을 쓴다 (docs/03 D5).
+      - --ngram-token-size=2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pptroot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - qait-mysql-data:/var/lib/mysql
+      # 컨테이너를 처음 만들 때 실행되는 SQL. Prisma 섀도 DB 권한을 준다.
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  qait-mysql-data:

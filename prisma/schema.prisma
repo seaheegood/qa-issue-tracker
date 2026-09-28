@@ -1,0 +1,1167 @@
+// IssueTracker 물리 스키마
+//
+// 근거: docs/03-데이터모델.md (개념 모델)
+// 범위: M-1 (실데이터 읽기 전용 조회) — docs/00 개정 이력 v2
+//
+// ─────────────────────────────────────────────────────────────
+// M-1에서 만드는 것과 안 만드는 것
+//
+//   만든다: projects, users, project_members, issue_statuses,
+//           priorities, environments, systems, features, issues, comments
+//
+//   안 만든다 (필요해지면 그때):
+//           status_transitions   → 상태를 바꿀 수 있어야 의미가 있음 (쓰기 기능)
+//           issue_histories      → 변경이 일어나야 쌓임 (쓰기 기능)
+//           attachments          → 업로드가 있어야 의미가 있음
+//           feature_milestones   → Q15 미확인 (개발완료를 어디에 적는지 모름)
+//           project_templates    → 두 번째 프로젝트가 생겨야 검증됨
+//           blockers, feature_relations → M-1 범위 밖
+//
+// ★ 단, project_id 는 처음부터 전부 넣는다.
+//   화면은 나중에 붙일 수 있지만, 컬럼을 나중에 넣으려면 전 테이블을 손봐야 한다.
+//   (docs/00 STEP 3)
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7부터 접속 주소(url)를 이 파일에 쓸 수 없다.
+// 스키마는 '구조'만 정의하고, '어디에 붙을지'는 prisma.config.ts 가 갖는다.
+// 스키마 파일이 환경에 따라 달라지지 않게 하려는 변경이다.
+datasource db {
+  provider = "mysql"
+}
+
+// ═══════════════════════════════════════════════════════════
+// 열거형
+//
+// 여기 있는 것들은 "프로젝트가 달라도 안 바뀌는 것"만 넣었다.
+// 프로젝트마다 달라지는 것(상태·우선순위·환경·기능분류)은 전부 테이블이다.
+//   → docs/03 "상태는 코드가 아니라 데이터다"
+// ═══════════════════════════════════════════════════════════
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SystemRole {
+  ADMIN
+  MEMBER
+}
+
+/// 직군. **소속 팀이 정한다** (`teams.role`) — 2026-09-11 개정.
+///
+/// ★ 원래 이름은 `TeamRole` 이었고 `project_members.role` 이 프로젝트마다
+///   따로 정했다. *"같은 사람이 A프로젝트에선 QA, B에선 DEV"* 를 하려던 것인데
+///   **실제로 그런 사례가 한 건도 없었다** — 역할은 QA팀 7명 전원 `QA`,
+///   개발1팀 5명 전원 `DEV` 로 **소속 팀과 100% 일치**했다.
+///   그래서 멤버 표를 없애고 팀이 그 자리를 대신한다 (`docs/03` v13).
+///
+/// ⚠️ `LEAD` 는 **과거 기록에만 남는다.** 프로젝트를 만든 사람에게 붙던 값이라
+///   팀 역할로는 고를 수 없다. 이미 찍힌 이력 72건을 지키려고 값만 남겨 둔다.
+/// ⚠️ `VIEWER`(보기 전용)는 **뺐다.** 해당자가 한 명도 없었고, Q17 에서
+///   *"역할로 제한하지 않고 이력을 남긴다"* 로 이미 정했다.
+enum TeamRole {
+  LEAD
+  QA
+  DEV
+  PLANNER
+}
+
+/// 상태 그룹. 프로젝트마다 상태 '이름'은 달라도 이 4개로 묶이면
+/// 대시보드는 프로젝트를 몰라도 동작한다. (docs/03 3.1 / D8 — 고정)
+enum StatusCategory {
+  OPEN
+  RESOLVED
+  CLOSED
+  PENDING
+}
+
+/// 재현율 — **얼마나 자주 재현되는가**.
+///
+/// ★ `docs/13` D-12 는 2026-08-22 에 이걸 *"안 한다"* 로 정했다. **뒤집는다 (2026-08-30).**
+///   당시 근거는 *"타당하지만 이번 범위가 큽니다"* 였다 — **범위 판단이었지 필요 판단이 아니었다.**
+///   요구가 두 번 나왔다 (QA-B 요구사항서 → 시험 운영 피드백 FB-008).
+///
+/// ★ 왜 테이블이 아니라 enum 인가.
+///   `CloseReason` 과 같은 성격이다 — **프로젝트가 달라도 안 바뀌는 QA 공용 어휘**다.
+///   `항상 / 간헐적 / 1회성` 은 첫 프로젝트이든 다음 프로젝트든 같은 말을 쓴다.
+///   테이블로 만들면 관리자 화면 · createProject 복제 · seed 가 전부 따라붙는데
+///   프로젝트별로 달라질 값이 아니라서 그 비용이 전부 낭비다.
+///   (상태·우선순위·환경이 테이블인 건 **프로젝트마다 실제로 다르기 때문**이다)
+///
+/// ★ `Monitoring` 상태와 한 쌍이다. 1회성 이슈가 재현되지 않아 Monitoring 으로 가는 게
+///   전형적인 흐름이다 — 재현율은 *"얼마나 자주"*, Monitoring 은 *"지금은 안 난다"*.
+enum ReproRate {
+  /// 항상 — 할 때마다 난다
+  ALWAYS
+  /// 간헐적 — 날 때도 있고 안 날 때도 있다
+  INTERMITTENT
+  /// 1회성 — 한 번 보고 그 뒤로 못 봤다
+  ONCE
+}
+
+/// 종결 사유. 상태를 8종으로 줄이면서 '취소'·'보류'가 상태에서 빠지고 여기로 왔다.
+///
+/// 상태는 "지금 어디 있는가"만 말하고, "왜 그렇게 됐는가"는 이 값이 맡는다.
+/// (docs/13 §4 — 현업 요구사항서 03번 모델 그대로)
+enum CloseReason {
+  /// QA 가 재현되지 않음을 확인했다. 정상 종결 — 이관된 1,287건이 여기 해당한다.
+  QA_CONFIRMED
+  /// 이슈가 아니었다 (오해·사양대로 동작)
+  NOT_AN_ISSUE
+  /// 다른 이슈와 중복. 원본 이슈 링크는 issue_relations 가 생기면 붙인다.
+  DUPLICATE
+  /// 지금은 처리하지 않기로 했다
+  ON_HOLD
+}
+
+enum UserType {
+  OPERATOR
+  SELLER
+  CUSTOMER
+}
+
+/// 시스템이 도는 판. `System.platform` 한 곳에서만 쓴다.
+/// ★ 이슈의 '플랫폼(PC·MO·POS)'과는 다른 것이다 — 그쪽은 `model Platform` 이다.
+///   이름이 겹쳐서 v9 에서 이쪽을 SystemPlatform 으로 옮겼다.
+enum SystemPlatform {
+  WEB
+  APP
+  API
+}
+
+/// 이슈 간 관계 (docs/13 §6).
+/// 지금 화면에 있는 건 DUPLICATE 뿐이다 — 종결 사유가 '중복'일 때 원본을 가리킨다.
+/// 나머지 둘은 테이블만 맞춰 두고 UI 는 나중에 붙인다.
+enum RelationType {
+  DUPLICATE
+  PRECEDES
+  DERIVES
+}
+
+enum CommentType {
+  DEV
+  PLAN
+  QA
+}
+
+// ═══════════════════════════════════════════════════════════
+// 1. 뿌리
+// ═══════════════════════════════════════════════════════════
+
+model Project {
+  id          Int           @id @default(autoincrement())
+  /// 시스템 내부 식별자. URL·설정에서 프로젝트를 가리킬 때 쓴다. 바꾸지 않는다.
+  key         String        @unique @db.VarChar(10)
+  /// ★ 이슈번호 앞에 붙일 약자. NULL 이면 숫자만 보인다 (기본값).
+  ///   'SP' 로 두면 SP-1704, 비우면 1704.
+  ///   화면에 그릴 때만 붙이므로 언제든 바꿔도 기존 번호가 틀어지지 않는다.
+  issuePrefix String?       @map("issue_prefix") @db.VarChar(10)
+  name        String        @db.VarChar(100)
+  description String?       @db.Text
+  status      ProjectStatus @default(ACTIVE)
+  /// 프로젝트별 이슈 채번 카운터 (docs/03 5장)
+  issueSeq    Int           @default(0) @map("issue_seq")
+  startedAt   DateTime?     @map("started_at") @db.Date
+  endedAt     DateTime?     @map("ended_at") @db.Date
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  statuses          IssueStatus[]
+  priorities        Priority[]
+  environments      Environment[]
+  systems           System[]
+  issues            Issue[]
+  transitions       StatusTransition[]
+  rounds            Round[]
+  platforms         Platform[]
+  savedFilters      SavedFilter[]
+  templates         IssueTemplate[]
+  importedLists     ImportedList[]
+  /// 지라 보내기 설정. 없으면 «아직 안 붙인 프로젝트» 다 (docs/11 14절)
+  jiraSetting       JiraSetting?
+
+  @@map("projects")
+}
+
+/// 팀 = 회사 조직 (개발1팀 · QA팀 · 기획팀 …).
+///
+/// ★ 프로젝트별이 아니다. project_members.role 과는 다른 축이다.
+///   같은 사람이 A프로젝트에선 QA 역할을 맡아도 소속은 계속 QA팀이다.
+///   그래서 project_id 를 두지 않는다 — 이 시스템에서 몇 안 되는 전역 테이블이다.
+model Team {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(50)
+  /// 아바타 배경색. 팀이 정해지면 그 사람 프로필 색이 팀 색으로 바뀐다.
+  color       String    @db.VarChar(7)
+  /// 이 팀의 **직군**. 코멘트 유형(FR-302)과 답변 주체(FR-208)를 여기서 정한다.
+  /// NULL = 아직 안 정함 → 코멘트는 `QA` 로 적히고 이력의 역할은 비어 둔다.
+  role        TeamRole?
+  description String?   @db.VarChar(200)
+  sortOrder   Int       @map("sort_order")
+  /// 없앤 팀도 삭제하지 않는다. 과거 소속 기록이 사라지면 안 된다 (users 와 같은 원칙)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("teams")
+}
+
+model User {
+  id      Int     @id @default(autoincrement())
+  /// 사내 계정. Q5(계정 체계) 미확인이라 지금은 자체 계정으로 만든다.
+  /// SSO(Google Workspace/AD)가 확인되면 로그인 방식만 바뀌고 이 테이블은 그대로 쓴다.
+  loginId String  @unique @map("login_id") @db.VarChar(50)
+  name    String  @db.VarChar(50)
+  email   String? @db.VarChar(100)
+
+  /// bcrypt 해시. 평문 비밀번호는 어디에도 저장하지 않는다.
+  /// NULL = 아직 비밀번호를 안 정한 계정(엑셀에서 이름만 따온 12명이 여기 해당).
+  ///        로그인할 수 없고, 관리자가 발급해야 한다.
+  passwordHash String? @map("password_hash") @db.VarChar(255)
+
+  systemRole SystemRole @default(MEMBER) @map("system_role")
+
+  /// 소속 팀. 관리자가 지정한다. NULL = 아직 배정 안 됨.
+  /// 팀을 지우지 않고 비활성만 하므로 이 FK 는 끊기지 않는다.
+  teamId Int? @map("team_id")
+
+  /// 퇴사자도 삭제하지 않는다. 과거 이슈의 작성자 정보가 사라지면 안 된다 (FR-804)
+  isActive    Boolean   @default(true) @map("is_active")
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  team             Team?                  @relation(fields: [teamId], references: [id])
+  sessions         Session[]
+  reportedIssues   Issue[]                @relation("reporter")
+  deletedIssues    Issue[]                @relation("issueDeleter")
+  assignedIssues   Issue[]                @relation("assignee")
+  answeredIssues   Issue[]                @relation("answeredBy")
+  jiraSentIssues   Issue[]                @relation("jiraSender")
+  comments         Comment[]
+  legacyComments   Comment[]              @relation("legacyLastAuthor")
+  issueHistories   IssueHistory[]         @relation("issueHistoryAuthor")
+  attachments      Attachment[]           @relation("attachmentUploader")
+  issueRelations   IssueRelation[]        @relation("relationAuthor")
+  savedFilters     SavedFilter[]
+  watching         IssueWatcher[]
+  notifications    Notification[]         @relation("NotificationTo")
+  notified         Notification[]         @relation("NotificationBy")
+  importedLists    ImportedList[]         @relation("importedListCreator")
+  feedbacks        Feedback[]             @relation("feedbackAuthor")
+  feedbacksChecked Feedback[]             @relation("feedbackChecker")
+
+  @@map("users")
+}
+
+/// 로그인 세션.
+///
+/// JWT 대신 DB에 세션을 둔 이유:
+///   - 로그아웃과 강제 만료가 즉시 반영된다. JWT는 발급하면 만료 전까지 무효화가 어렵다.
+///   - 사내 도구라 "누가 지금 접속해 있나"를 관리자가 볼 수 있어야 한다.
+///   - 하루 수십 명 규모라 DB 조회 한 번이 부담되지 않는다.
+model Session {
+  /// 쿠키에 담는 토큰의 SHA-256 해시.
+  /// 원본 토큰은 저장하지 않는다 — DB가 유출돼도 그것만으로 로그인할 수 없게.
+  id        String   @id @db.Char(64)
+  userId    Int      @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// 2. 프로젝트별 설정 마스터
+//
+// 이 4개가 "설정은 코드가 아니라 데이터" 원칙의 실체다.
+// enum으로 박았다면 두 번째 프로젝트를 붙이는 순간 코드를 고쳐야 한다.
+// ═══════════════════════════════════════════════════════════
+
+model IssueStatus {
+  id          Int            @id @default(autoincrement())
+  projectId   Int            @map("project_id")
+  code        String         @db.VarChar(30)
+  name        String         @db.VarChar(50)
+  category    StatusCategory
+  /// 배지 색상 (FR-508)
+  color       String         @db.VarChar(7)
+  sortOrder   Int            @map("sort_order")
+  /// 이슈 등록 시 기본 상태
+  isInitial   Boolean        @default(false) @map("is_initial")
+  /// 종결 상태
+  isTerminal  Boolean        @default(false) @map("is_terminal")
+  /// ⚠️ **은퇴 (2026-08-22).** 사유 필수는 이제 `status_transitions.require_note` 가 정한다.
+  ///   도착지 하나로는 "어디서 왔느냐에 따라 적을 것이 다르다" 를 표현할 수 없었다.
+  ///   컬럼을 남긴 이유는 되돌릴 때 설정이 있어야 해서다. **읽지 말 것.**
+  requireNote Boolean        @default(false) @map("require_note")
+  isActive    Boolean        @default(true) @map("is_active")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  Issue[]
+
+  transitionsFrom StatusTransition[] @relation("TransitionFrom")
+  transitionsTo   StatusTransition[] @relation("TransitionTo")
+
+  @@unique([projectId, code])
+  @@map("issue_statuses")
+}
+
+/// 상태 전이 규칙 (docs/03 3.2 · docs/13 D-01).
+///
+/// ★ v6 에서 "만들지 않기로" 했다가 v8 에서 되살렸다. 현업 요구가 정반대였다 —
+///   "정해진 전이만 허용해야 합니다. 자유롭게 아무 값이나 고를 수 있으면 시트와 다를 게 없습니다."
+///
+/// 여기 없는 (from, to) 조합은 드롭다운에 뜨지도 않고 서버에서도 거부된다.
+/// 단 '종결'로 가는 길은 모든 상태에 열어 뒀다 — 잘못된 이슈를 스스로 취소하는
+/// 흐름을 막으면 사람들이 엑셀로 돌아간다 (R1). 막는 것은 처리 경로뿐이다.
+model StatusTransition {
+  id           Int     @id @default(autoincrement())
+  projectId    Int     @map("project_id")
+  fromStatusId Int     @map("from_status_id")
+  toStatusId   Int     @map("to_status_id")
+  /// ★ 만들되 채우지 않는다.
+  ///   project_members.role 이 엑셀에서 추측한 값이라 신뢰할 수 없다 (v6 판단은 여기서 유효).
+  ///   역할이 아니라 '경로'만 강제한다.
+  allowedRoles Json?   @map("allowed_roles")
+  /// ★ 전이별 사유 필수 (Reason 5종 · docs/13 §5). 2026-08-22 부터 **여기가 유일한 기준**이다.
+  ///   `issue_statuses.require_note` 로 보던 것을 옮겼다 — 도착지 하나로는
+  ///   "Merge Pending→Fixed 는 원인·조치, Fixed→Closed 는 확인한 케이스" 를 구분할 수 없다.
+  requireNote  Boolean @default(false) @map("require_note")
+  /// 사유 칸의 이름. `Developer Reason` · `QA Reason` · `Demand Reason` · `Answer Reason`.
+  /// 요구사항서가 쓰는 말 그대로 쓴다 — 번역하면 현업이 자기 요구를 못 알아본다.
+  noteLabel    String? @map("note_label") @db.VarChar(30)
+  /// 무엇을 적어야 하는지. 빈 칸만 주면 "확인함" 세 글자가 들어온다.
+  noteHint     String? @map("note_hint") @db.VarChar(255)
+  /// 관리자가 화면에서 껐다 켠다. 지우지 않는 이유는 다시 켤 때 설정이 남아 있어야 해서다.
+  isActive     Boolean @default(true) @map("is_active")
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  from    IssueStatus @relation("TransitionFrom", fields: [fromStatusId], references: [id], onDelete: Cascade)
+  to      IssueStatus @relation("TransitionTo", fields: [toStatusId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fromStatusId, toStatusId])
+  @@index([projectId, fromStatusId])
+  @@map("status_transitions")
+}
+
+/// 차수 = 테스트 회차. 통계와 리포트의 기준이 된다 (docs/13 §6).
+///
+/// ★ 차수가 끝나도 이슈는 살아 있다. 이슈는 **발견 차수**를 가질 뿐이다.
+///   그래서 이슈를 차수에 '넣는' 게 아니라 '언제 발견했는지'를 적는 칸이다.
+///
+/// 우선순위·환경과 달리 **관리자 화면에서 늘린다.** 프로젝트가 돌면서 계속 생기기 때문이다.
+model Round {
+  id        Int       @id @default(autoincrement())
+  projectId Int       @map("project_id")
+  code      String    @db.VarChar(30)
+  name      String    @db.VarChar(50)
+  /// 기간. 번다운 차트가 이걸 x축으로 쓴다 (docs/10)
+  startedOn DateTime? @map("started_on") @db.Date
+  endedOn   DateTime? @map("ended_on") @db.Date
+  sortOrder Int       @map("sort_order")
+  isActive  Boolean   @default(true) @map("is_active")
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  templates IssueTemplate[]
+
+  @@unique([projectId, code])
+  @@map("rounds")
+}
+
+/// 이슈가 발견된 판 — PC · MO · POS.
+///
+/// ★ 시스템(판매자 센터·운영자 콘솔…)과 다른 축이다. 같은 서비스라도 PC 와 모바일은 다르게 깨진다.
+///   요구사항서 02: "같은 현상이 PC와 MO 양쪽에서 나는 경우가 많은데, 단일 선택이면
+///   이슈를 두 건으로 쪼개거나 한쪽을 현상 본문에 묻어 두게 됩니다."
+///   그래서 이슈↔플랫폼은 **N:M** 이다 (issue_platforms).
+model Platform {
+  id        Int     @id @default(autoincrement())
+  projectId Int     @map("project_id")
+  code      String  @db.VarChar(30)
+  name      String  @db.VarChar(50)
+  sortOrder Int     @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  IssuePlatform[]
+
+  @@unique([projectId, code])
+  @@map("platforms")
+}
+
+model Priority {
+  id        Int     @id @default(autoincrement())
+  projectId Int     @map("project_id")
+  code      String  @db.VarChar(30)
+  name      String  @db.VarChar(50)
+  color     String  @db.VarChar(7)
+  sortOrder Int     @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  templates IssueTemplate[]
+
+  @@unique([projectId, code])
+  @@map("priorities")
+}
+
+model Environment {
+  id        Int     @id @default(autoincrement())
+  projectId Int     @map("project_id")
+  code      String  @db.VarChar(30)
+  name      String  @db.VarChar(50)
+  sortOrder Int     @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  templates IssueTemplate[]
+
+  @@unique([projectId, code])
+  @@map("environments")
+}
+
+model System {
+  id          Int            @id @default(autoincrement())
+  projectId   Int            @map("project_id")
+  /// 기능ID 접두어 2글자. SVPR-01-01 의 'SV'
+  code        String         @db.VarChar(2)
+  name        String         @db.VarChar(50)
+  /// ★ 화면에서는 받지 않는다 (A-68) — 프로젝트마다 뜻이 다르다.
+  ///   컬럼과 첫 프로젝트의 기존 값(SV/AD=OPERATOR · SL=SELLER · DI=CUSTOMER)은 남는다 (A-69).
+  ///   `@default` 가 DB 와 스키마 **양쪽**에 있어야 create 에서 생략할 수 있다.
+  userType    UserType       @default(OPERATOR) @map("user_type")
+  /// ★ 화면에서는 받지 않는다 (A-68). 전부 WEB 이다.
+  platform    SystemPlatform @default(WEB)
+  /// "판매자 센터랑 운영자 콘솔이 뭐가 다르지?"를 3초 만에 알게 해주는 칸
+  description String?        @db.Text
+  /// ★ 화면에서는 받지 않는다 (A-68) — 읽는 코드가 한 줄도 없었다.
+  baseUrl     String?        @map("base_url") @db.VarChar(255)
+  sortOrder   Int            @map("sort_order")
+  isActive    Boolean        @default(true) @map("is_active")
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  templates IssueTemplate[]
+
+  @@unique([projectId, code])
+  @@map("systems")
+}
+
+// ═══════════════════════════════════════════════════════════
+// 4. 이슈 축
+// ═══════════════════════════════════════════════════════════
+
+model Issue {
+  id        Int @id @default(autoincrement())
+  projectId Int @map("project_id")
+  /// ★ 이슈번호의 정본. 표시할 때만 project.issuePrefix 를 앞에 붙인다.
+  ///   문자열('SP-1704')로 저장하면 약자를 바꾸는 순간 전부 틀어지므로 숫자만 갖는다.
+  seq       Int
+
+  priorityId    Int  @map("priority_id")
+  environmentId Int  @map("environment_id")
+  systemId      Int  @map("system_id")
+
+  /// 이슈가 난 화면 이름. **자유 입력**이다.
+  /// ★ 이름에 legacy 가 붙은 건 엑셀에서 온 원문이라는 뜻이다.
+  ///   한때 이걸 기능(IA) FK 로 정규화하려 했으나, 2026-09-16 에 기능 축을 통째로
+  ///   걷어내면서 **이 칸이 화면명의 정본이 됐다** (docs/09).
+  legacyScreenName String? @map("legacy_screen_name") @db.VarChar(200)
+
+  /// ★ 한 줄 제목. **목록이 보여주는 건 이것뿐이다** (I-08).
+  ///   2026-09-16 신설. 그전에는 content 가 제목 노릇을 하고 있었다.
+  title       String  @db.VarChar(200)
+  testPath    String? @map("test_path") @db.Text
+  /// ★ NOT NULL 을 풀었다 — 대량등록으로 들어오는 행은 본문이 없을 수 있다.
+  ///   등록 화면에서는 계속 필수다 (N-01).
+  content     String? @db.Text
+  expected    String? @db.Text
+  /// 엑셀 'QAI #'. '-' 는 NULL 로 넣는다 (1,191건)
+  externalRef String? @map("external_ref") @db.VarChar(50)
+
+  /**
+   * 지라 티켓 키 (`WEB-123`).
+   *
+   * ★ **두 길로 채워진다** — `지라로 보내기` 가 만들고 받아 적거나(1단계),
+   *   이미 지라에 있는 건을 **손으로 적어 둔다**(0단계). 둘 다 같은 칸이다.
+   * ★ **문자열 그대로 둔다.** 지라 프로젝트 키(`WEB`)를 떼고 숫자만 갖는 방식은
+   *   쓰지 않는다 — 우리 `seq` 와 달리 이 번호의 정본은 **지라**이고,
+   *   지라가 프로젝트 키를 바꾸면 우리가 맞출 수 있는 값이 아니다.
+   * ⚠️ **unique 를 걸지 않는다.** 한 티켓에 우리 이슈 둘을 적어 두는 일이 실제로 있다
+   *   (중복 제보를 한 티켓으로 넘긴 경우). 막으면 손으로 적어 두는 길이 막힌다.
+   */
+  jiraKey      String?   @map("jira_key") @db.VarChar(30)
+  /// 언제 보냈나. **NULL 인데 `jiraKey` 가 있으면 «손으로 적어 둔 것»** 이다.
+  jiraSentAt   DateTime? @map("jira_sent_at")
+  /// 누가 보냈나. 지라 쪽 등록자가 아니라 **우리 화면에서 버튼을 누른 사람**이다.
+  jiraSentById Int?      @map("jira_sent_by")
+
+  /// 재현율 (FB-008 · docs/13 D-12 정정).
+  ///
+  /// ★ **NULL 을 허용한다.** 신규 등록에서는 필수(N-59)지만, 엑셀에서 이관한 1,704건에는
+  ///   채울 값이 없다. 지어내면 "항상 재현"이 1,704건 생기고 그 순간 이 칸은 못 믿는 값이 된다.
+  ///   `foundVersion` 을 필수로 하면서 이관분을 비워 둔 것과 같은 처리다.
+  reproRate ReproRate? @map("repro_rate")
+
+  reporterId Int      @map("reporter_id")
+  reportedAt DateTime @map("reported_at")
+
+  /**
+   * 숨긴 시각. NULL = 살아 있다.
+   *
+   * ★★ **«삭제» 를 숨김으로 만든다** (2026-09-17 · 사용자 지시).
+   *   `docs/02` FR-108 과 `docs/11` 은 *"이슈를 물리 삭제하지 않는다 — 의도적"* 이었다.
+   *   **뒤집되 «지우지는» 않는다** — 행은 남고 화면에서만 사라진다.
+   *
+   * ★ 왜 `isActive` 가 아니라 `deletedAt` 인가.
+   *   마스터(상태·우선순위)의 `isActive` 는 *"새로 고를 수 있나"* 라 **조회는 안 거른다**.
+   *   여기는 반대로 **조회에서 빼는 것**이 목적이고, **언제 숨겼는지**가 되살릴 때 쓰인다.
+   * ⚠️ 이슈번호(`seq`)는 **되돌아오지 않는다.** 숨겨도 그 번호는 영영 그 이슈 것이다 —
+   *   되살릴 수 있어야 하므로 번호를 재활용하면 안 된다.
+   */
+  deletedAt  DateTime? @map("deleted_at")
+  /// 누가 숨겼나. 되살릴 때 물어볼 사람이 없으면 곤란하다
+  deletedById Int?     @map("deleted_by")
+  statusId   Int      @map("status_id")
+  assigneeId Int?     @map("assignee_id")
+
+  /// 발견 차수. 신규 등록은 필수이고, 엑셀에서 이관한 1,704건은 NULL 이다.
+  /// 엑셀에 차수 칼럼이 없었다 — 없는 걸 지어내지 않는다 (docs/13 §9-2).
+  roundId Int? @map("round_id")
+
+  /// 검출 버전 / 반영 버전. **자유 입력**이다.
+  ///
+  /// 표기가 아직 정리 전이라 선택지를 미리 만들 수 없다. 요구사항서 판단 그대로다 —
+  /// "중요한 건 형식보다 반영 버전이라는 칸이 있는 것".
+  /// 지금은 그 칸이 없어서 "이거 배포된 거 맞나요?"를 매번 메신저로 묻는다.
+  /// 실제 표기는 코멘트에 v0.2~v0.7 로 48건, 'PR #2431 머지완료' 형태로 85건 있다.
+  foundVersion String?   @map("found_version") @db.VarChar(50)
+  fixedVersion String?   @map("fixed_version") @db.VarChar(50)
+  resolvedAt   DateTime? @map("resolved_at")
+
+  /// 왜 종결됐는가. 상태가 '종결'일 때만 채워진다 (docs/13 §4).
+  ///
+  /// 상태를 8종으로 줄이면서 '취소'·'보류'가 상태에서 빠지고 이 칸으로 왔다.
+  /// 이관분은 QA확인완료 1,287 · 취소 18 · 보류 3 으로 채워져 있다.
+  /// ★ 취소 18건이 '이슈 아님'인지 '중복'인지는 엑셀에 없어서 알 수 없다.
+  ///   NOT_AN_ISSUE 로 넣었다 — 원래 상태가 '취소'였다는 사실만 확실하다.
+  closeReason CloseReason? @map("close_reason")
+
+  /// Answered 로 바뀐 순간의 사람과 역할을 자동으로 찍는다 (FR-208).
+  /// 상태를 '개발답변완료/기획답변완료/QA답변완료' 셋으로 쪼개지 않기 위한 장치.
+  /// 엑셀에는 없는 정보라 이관분은 전부 NULL 이다. 정상이다.
+  answeredById   Int?      @map("answered_by_id")
+  answeredByRole TeamRole? @map("answered_by_role")
+  answeredAt     DateTime? @map("answered_at")
+
+  /// 체류일 계산용 (FR-207)
+  statusChangedAt DateTime @map("status_changed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  priority      Priority        @relation(fields: [priorityId], references: [id])
+  environment   Environment     @relation(fields: [environmentId], references: [id])
+  system        System          @relation(fields: [systemId], references: [id])
+  status        IssueStatus     @relation(fields: [statusId], references: [id])
+  reporter      User            @relation("reporter", fields: [reporterId], references: [id])
+  assignee      User?           @relation("assignee", fields: [assigneeId], references: [id])
+  deletedBy     User?           @relation("issueDeleter", fields: [deletedById], references: [id])
+  answeredBy    User?           @relation("answeredBy", fields: [answeredById], references: [id])
+  jiraSentBy    User?           @relation("jiraSender", fields: [jiraSentById], references: [id])
+  round         Round?          @relation(fields: [roundId], references: [id])
+  comments      Comment[]
+  histories     IssueHistory[]
+  attachments   Attachment[]
+  platforms     IssuePlatform[]
+  relationsFrom IssueRelation[] @relation("relFrom")
+  relationsTo   IssueRelation[] @relation("relTo")
+  watchers      IssueWatcher[]
+  notifications Notification[]
+  /// 대량등록으로 만들어진 이슈라면 그 원본 행. 아니면 없다.
+  importedRow   ImportedRow?
+
+  // 인덱스는 전부 project_id 로 시작한다.
+  // 프로젝트가 20개가 되면 project_id 없는 인덱스는 무용지물이 된다 (docs/03 4.2)
+  @@unique([projectId, seq])
+  @@index([projectId, statusId])
+  @@index([projectId, systemId])
+  @@index([projectId, assigneeId, statusId])
+  @@index([projectId, reporterId])
+  @@index([projectId, reportedAt])
+  /// ★ 목록 정렬용 (2026-09-16). 머리줄을 눌러 `수정일`·`등록일` 로 정렬하는데,
+  ///   인덱스가 없으면 그 프로젝트 전건을 훑어 정렬한다 (첫 프로젝트 1,800건 기준).
+  @@index([projectId, updatedAt])
+  @@index([projectId, createdAt])
+  /// ★ 숨김은 **모든 목록 질의의 기본 조건**이 된다 (`buildWhere`). 인덱스 없이는
+  ///   프로젝트 전건을 훑어 거른다.
+  @@index([projectId, deletedAt])
+  @@index([projectId, priorityId, statusId])
+  @@index([projectId, roundId])
+  /// 전 프로젝트 통합 "내 미해결" 조회용 (FR-012) — 유일하게 project_id 로 시작하지 않는 인덱스
+  @@index([assigneeId, statusId])
+  @@map("issues")
+}
+
+/// 이슈 ↔ 플랫폼 (N:M).
+///
+/// 단일 선택이었다면 이 테이블이 없어도 됐다. 굳이 N:M 으로 둔 이유는
+/// **같은 현상이 PC·MO 양쪽에서 나는 경우가 많기 때문**이다.
+/// 한 건으로 관리하면서 "MO 이슈만" 필터도 그대로 된다.
+model IssuePlatform {
+  issueId    Int @map("issue_id")
+  platformId Int @map("platform_id")
+
+  issue    Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, platformId])
+  @@index([platformId])
+  @@map("issue_platforms")
+}
+
+/// 이슈 간 관계.
+///
+/// ★ 텍스트가 아니라 링크여야 하는 이유 (요구사항서 02):
+///   "코멘트에 `#2358로 해소` 처럼 텍스트로 적습니다. 8/14 보고서를 검증하다가
+///    **이슈 번호가 실제와 다른 항목을 14건** 찾았는데, 텍스트라 아무도 못 잡고 있었습니다."
+///   FK 면 잘못된 번호는 애초에 들어가지 않는다.
+///
+/// 방향이 있다. `from` 이 `to` 를 가리킨다 — 중복이면 from 이 중복본, to 가 원본이다.
+model IssueRelation {
+  id          Int          @id @default(autoincrement())
+  fromIssueId Int          @map("from_issue_id")
+  toIssueId   Int          @map("to_issue_id")
+  type        RelationType
+  createdById Int          @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  fromIssue Issue @relation("relFrom", fields: [fromIssueId], references: [id], onDelete: Cascade)
+  toIssue   Issue @relation("relTo", fields: [toIssueId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("relationAuthor", fields: [createdById], references: [id])
+
+  @@unique([fromIssueId, toIssueId, type])
+  @@index([toIssueId])
+  @@map("issue_relations")
+}
+
+/// 첨부파일 (docs/03 4.4 — P2 해결).
+///
+/// ★ 파일 실체는 DB가 아니라 **디스크**에 두고 경로만 저장한다.
+///   DB에 넣으면 백업이 무거워지고 조회할 때마다 큰 데이터가 딸려온다.
+///
+/// ★ 파일은 로그인한 사람만 받을 수 있다. `/api/attachments/{id}` 를 거치며,
+///   웹 서버가 정적 파일로 바로 뿌리지 않는다. 사내 자료이므로 URL 만으로 열리면 안 된다.
+model Attachment {
+  id        Int  @id @default(autoincrement())
+  /// 이슈에 직접 붙였는지, 코멘트에 붙였는지. 둘 중 하나만 채워진다.
+  issueId   Int? @map("issue_id")
+  commentId Int? @map("comment_id")
+
+  /// 사용자가 올린 원본 이름. 화면에 보여주고 내려받을 때 쓴다.
+  fileName   String @map("file_name") @db.VarChar(255)
+  /// 디스크의 실제 경로. 원본 이름과 분리한다 —
+  /// 같은 이름이 겹치거나, 이름에 경로 문자(../)가 섞여 들어오는 것을 막는다.
+  storedPath String @map("stored_path") @db.VarChar(500)
+  mimeType   String @map("mime_type") @db.VarChar(100)
+  sizeBytes  Int    @map("size_bytes")
+
+  uploadedById Int      @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  issue      Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation("attachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([issueId])
+  @@index([commentId])
+  @@map("attachments")
+}
+
+/// 이슈 변경 이력 (docs/03 4.5 — P6 해결).
+///
+/// ★ append-only. UPDATE·DELETE 를 하지 않는다.
+///   이 테이블이 쌓여야 "처리에 며칠 걸렸나"와 "재수정이 몇 번 났나"를 계산할 수 있고,
+///   그게 대시보드(docs/10)에서 임원이 가장 궁금해하는 두 지표다.
+///
+/// ⚠️ 전이 규칙(status_transitions)은 일부러 만들지 않았다.
+///   현업은 QA 가 스스로 취소하기도 하고 개발이 보류하기도 한다.
+///   경로를 강제하는 대신 **누가 무엇을 무엇으로 바꿨는지 남기는 것**으로 해결한다.
+/// 첨부파일의 «실물» 을 DB 에 담는 표.
+///
+/// ★★ **디스크가 없는 곳에 올릴 때만 쓴다** (`IT_STORAGE=db` · 2026-09-20 신설).
+///   무료 호스팅(Vercel 등)은 요청이 끝나면 디스크가 사라진다. `storage/` 에 써도
+///   다음 요청에서는 없다 — **올라간 것처럼 보이고 열면 깨지는** 최악의 모양이 된다.
+///
+/// ★ `attachments` 에 컬럼을 더하지 않고 **표를 따로 둔 이유**:
+///   목록·상세는 첨부의 *이름·크기·형식* 만 읽는데, 같은 표에 수 MB 짜리 바이트가
+///   들어 있으면 그 조회가 통째로 무거워진다. 실물은 내려받을 때만 필요하다.
+///
+/// 잇는 열쇠는 `attachments.stored_path` 와 **같은 문자열**이다. 외래키를 걸지 않은 것은
+/// 디스크에 담긴 기존 첨부에는 여기 대응하는 행이 없기 때문이다(둘이 공존한다).
+model FileBlob {
+  /// `{프로젝트}/{연월}/{uuid}.{확장자}` — `attachments.stored_path` 와 같은 값
+  path      String   @id @db.VarChar(500)
+  /// MEDIUMBLOB = 16MB. 앱 상한(기본 10MB)보다 넉넉해야 한다
+  data      Bytes    @db.MediumBlob
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("file_blobs")
+}
+
+model IssueHistory {
+  id      Int    @id @default(autoincrement())
+  issueId Int    @map("issue_id")
+  /// title / content / test_path / expected / screen / external_ref /
+  /// found_version / fixed_version / status / assignee / priority /
+  /// environment / system / round / repro / platform / relation / attachment /
+  /// comment / comment_deleted            ← 코멘트는 2026-09-17 신설
+  field   String @db.VarChar(30)
+
+  /// 표시용 **이름**을 넣는다 ('Open' → 'Fixed').
+  /// id 를 넣으면 나중에 마스터가 바뀌었을 때 이력을 읽을 수 없다.
+  ///
+  /// ★★ **2026-09-17 — 긴 글도 전문을 남긴다.**
+  ///   원래 `VarChar(255)` 였고 본문 3종(content·test_path·expected)은 **둘 다 NULL** 로
+  ///   두고 `field` 만 남겼다. 그래서 *"내용이 바뀌었다"* 는 알아도
+  ///   **무엇이 어떻게 바뀌었는지는 아무 데도 없었다.**
+  ///   사용자 지시로 `Text` 로 넓히고 전/후를 통째로 담는다.
+  /// ⚠️ 이력 표가 커진다 — 그게 이 선택의 값이다.
+  oldValue String? @map("old_value") @db.Text
+  newValue String? @map("new_value") @db.Text
+
+  changedById   Int       @map("changed_by")
+  /// 변경 시점의 프로젝트 역할을 박아둔다.
+  /// 나중에 역할이 바뀌어도 "당시 QA였던 사람이 종결했다"가 보존되어야 한다.
+  changedByRole TeamRole? @map("changed_by_role")
+  /// 사유. require_note 인 상태로 갈 때만 채워진다.
+  note          String?   @db.Text
+  changedAt     DateTime  @default(now()) @map("changed_at")
+
+  issue     Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  changedBy User  @relation("issueHistoryAuthor", fields: [changedById], references: [id])
+
+  @@index([issueId, changedAt])
+  @@map("issue_histories")
+}
+
+model Comment {
+  id                 Int         @id @default(autoincrement())
+  issueId            Int         @map("issue_id")
+  /// 엑셀의 개발-코멘트(P) / 기획-코멘트(Q) / QA-코멘트(R) 3개 컬럼에 대응.
+  /// 앞으로는 작성자의 프로젝트 역할에서 자동 결정된다 (FR-302)
+  type               CommentType
+  authorId           Int         @map("author_id")
+  body               String      @db.LongText
+  isEdited           Boolean     @default(false) @map("is_edited")
+  /// 이관분 한정. 엑셀 코멘트 본문에 손으로 적힌 '7/29 14:57 이름)' 중
+  /// 마지막 것에서 뽑아낸 작성자. 이름이 users 와 정확히 일치할 때만 채운다.
+  legacyLastAuthorId Int?        @map("legacy_last_author_id")
+
+  /// 대댓글. NULL 이면 최상위 코멘트.
+  /// 한 단계만 허용한다 — 답글의 답글까지 열면 화면이 계단처럼 무너지고,
+  /// 이슈 트래커에서 실제로 필요한 건 "이 말에 대한 답" 한 겹뿐이다.
+  parentId Int? @map("parent_id")
+
+  /// ★ 마이그레이션 원문 보존 (FR-905).
+  /// "7/20 10:05 QA-A)" 을 파싱해서 쪼개더라도 원문을 반드시 남긴다.
+  /// 마이그레이션 버그로 코멘트가 뒤섞이면 신뢰를 잃고 사람들이 엑셀로 돌아간다.
+  legacyRaw String? @map("legacy_raw") @db.LongText
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  attachments      Attachment[]
+  issue            Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author           User         @relation(fields: [authorId], references: [id])
+  legacyLastAuthor User?        @relation("legacyLastAuthor", fields: [legacyLastAuthorId], references: [id])
+  parent           Comment?     @relation("commentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies          Comment[]    @relation("commentThread")
+
+  @@index([issueId, createdAt])
+  @@index([parentId])
+  @@map("comments")
+}
+
+/// 저장된 필터 (요구사항서 09 · docs/13 D-72~).
+///
+/// ★ URL 을 그대로 담는다. 조건을 컬럼으로 쪼개지 않는다.
+///   필터가 하나 늘 때마다 컬럼을 늘리면 마이그레이션이 따라붙고, 결국
+///   `issue-filter.ts` 와 이 테이블이 갈라진다. 쿼리스트링 한 줄이면 그 문제가 없다.
+///   해석은 항상 `parseFilter()` 한 곳에서 한다.
+///
+/// ★ 이름을 필수로 받는 이유.
+///   요구서가 원한 건 저장이 아니라 **공유**다 — *"제가 보는 이 화면 그대로 보세요"*.
+///   이름 없는 북마크는 다음 주에 자기도 뭔지 모른다.
+model SavedFilter {
+  id        Int      @id @default(autoincrement())
+  projectId Int      @map("project_id")
+  ownerId   Int      @map("owner_id")
+  name      String   @db.VarChar(60)
+  /// `status=Open,Reopened&priority=Critical` 형태. 앞에 `?` 는 붙이지 않는다.
+  ///
+  /// ⚠️ **`VarChar(500)` 이었다** (2026-09-16 개정). 필터가 전부 다중 선택이 되면서
+  ///   CSV 가 길어졌고, 저장할 때 `.slice(0, 500)` 이 **말없이 잘랐다.**
+  ///   잘린 쿼리는 문법이 멀쩡해 보이면서 **다른 결과**를 낸다 — 제일 나쁜 종류다.
+  ///   넓히고, 그래도 넘치면 **자르지 말고 거절**한다 (`filter-actions.ts`).
+  query     String   @db.Text
+  /// 켜면 프로젝트의 모든 사람이 본다. 끄면 나만.
+  isShared  Boolean  @default(false) @map("is_shared")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// 같은 사람이 같은 이름을 두 번 저장하면 덮어쓴다 — 새로 만들지 않는다.
+  @@unique([ownerId, name])
+  @@index([projectId, isShared])
+  @@map("saved_filters")
+}
+
+/// 이슈 구독 (요구사항서 05 · docs/13 D-10).
+///
+/// ★ **있다/없다 두 상태로 두면 안 된다.**
+///   코멘트를 달면 자동으로 붙는데, 해제해도 다음 코멘트에서 다시 붙으면
+///   **해제 버튼이 거짓말**이 된다. 요구서가 못박은 것이 정확히 이 지점이다 —
+///   *"해제가 쉬워야 합니다. 안 그러면 알림이 소음이 됩니다."*
+///
+///     행이 없음        한 번도 안 건드림 → 자동 규칙이 붙일 수 있다
+///     muted = false    구독 중
+///     muted = true     ★ 내가 직접 껐다 → 자동 규칙이 **다시 붙이지 않는다**
+///
+///   그래서 자동 추가는 전부 `upsert(create: { muted: false }, update: {})` 다.
+///   **update 를 비워 두는 것이 이 설계의 핵심**이다.
+model IssueWatcher {
+  id        Int      @id @default(autoincrement())
+  issueId   Int      @map("issue_id")
+  userId    Int      @map("user_id")
+  muted     Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, userId])
+  @@index([userId])
+  @@map("issue_watchers")
+}
+
+/// 알림의 종류. **5종만 만든다** (2026-08-23 결정).
+///
+/// 첨부·본문 수정·우선순위·플랫폼·차수·버전은 알림을 만들지 않는다.
+/// 이슈를 열면 변경 이력에 다 보인다. 하루 77건이 쏟아지는 프로젝트에서
+/// "이력에 남는 건 전부 알림" 은 요구서가 경계한 **소음**이 된다.
+enum NotificationKind {
+  /// 상태가 바뀌었다
+  STATUS
+  /// 종결됐다 — 상태 변경이지만 사유가 붙고 눈에 띄어야 해서 따로 둔다
+  CLOSED
+  /// 코멘트·답글이 달렸다
+  COMMENT
+  /// 나에게 담당이 배정됐다 (구독 여부와 무관하게 본인에게)
+  ASSIGNED
+  /// 코멘트에서 이름이 불렸다
+  MENTION
+}
+
+/// 앱 안 알림 (요구사항서 07 · docs/13 D-11).
+///
+/// ★ **메일은 만들지 않는다.** 서버가 개인 맥이라 꺼져 있는 동안의 알림이 사라지고,
+///   반쪽 알림은 한 번 놓치면 아무도 다시 믿지 않는다. 사내 서버에 올라가면
+///   이 테이블을 읽어 발송만 붙이면 된다 — **수신자 계산은 여기서 이미 끝나 있다.**
+model Notification {
+  id        Int              @id @default(autoincrement())
+  /// 받는 사람
+  userId    Int              @map("user_id")
+  /// 일으킨 사람. ★ 자기 행동은 자기에게 오지 않는다 (lib/notify.ts 에서 한 번에 거른다)
+  actorId   Int              @map("actor_id")
+  issueId   Int              @map("issue_id")
+  kind      NotificationKind
+  /// ★ **완성된 문장을 그대로 저장한다** — `Merge Pending → Fixed` 처럼.
+  ///   issue_histories.old_value 와 같은 원칙이다 (docs/03). id 만 넣고 나중에 조립하면
+  ///   상태 이름이 바뀌었을 때 **그때 무슨 일이 있었는지 읽을 수 없다.**
+  title     String           @db.VarChar(255)
+  /// 눌렀을 때 갈 곳. 비어 있으면 그 이슈로 간다.
+  /// ★ **일괄 편집 때문에 생긴 칸**이다. 12건을 한꺼번에 바꾸면 알림을 한 통으로 묶는데,
+  ///   그 한 통이 가리킬 곳은 이슈 하나가 아니라 **그 12건의 목록**(`?seq=…`)이다.
+  href      String?          @db.VarChar(500)
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user  User  @relation("NotificationTo", fields: [userId], references: [id], onDelete: Cascade)
+  actor User  @relation("NotificationBy", fields: [actorId], references: [id], onDelete: Cascade)
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([issueId])
+  @@map("notifications")
+}
+
+/// 이슈 템플릿 (요구사항서 09 · docs/13).
+///
+/// ★ **필수값 9개의 부담을 상쇄하는 것이 목적**이다 (`docs/13` 미결 3).
+///   "콘솔 2차 회귀" 를 고르면 9개 중 6~7개가 채워지고, 이슈 내용·기대 결과만 쓰면 된다.
+///
+/// ★ 칸이 전부 nullable 인 이유 — 템플릿이 **일부만** 채워도 된다.
+///   안 채운 칸은 직전값(마지막으로 내가 등록한 이슈)으로 내려간다.
+///   기본값 우선순위가 4단이 된다: **템플릿 → 직전값 → 마스터 → 빈값**.
+model IssueTemplate {
+  id            Int     @id @default(autoincrement())
+  projectId     Int     @map("project_id")
+  name          String  @db.VarChar(60)
+  /// 재현 경로 뼈대. 여기에 가장 큰 절감이 있다 — 매번 같은 진입 경로를 다시 친다.
+  testPath      String? @map("test_path") @db.Text
+  expected      String? @db.Text
+  foundVersion  String? @map("found_version") @db.VarChar(50)
+  screenName    String? @map("screen_name") @db.VarChar(255)
+  roundId       Int?    @map("round_id")
+  priorityId    Int?    @map("priority_id")
+  environmentId Int?    @map("environment_id")
+  systemId      Int?    @map("system_id")
+  /// 플랫폼은 N:M 이라 id 가 아니라 코드 배열로 담는다 (`["PC","MO"]`).
+  /// 조인 테이블을 하나 더 만들 값이 아니다 — 템플릿은 읽기 전용 기본값일 뿐이다.
+  platformCodes Json?   @map("platform_codes")
+  sortOrder     Int     @default(0) @map("sort_order")
+  isActive      Boolean @default(true) @map("is_active")
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  round       Round?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  priority    Priority?    @relation(fields: [priorityId], references: [id], onDelete: SetNull)
+  environment Environment? @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  system      System?      @relation(fields: [systemId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, name])
+  @@index([projectId, isActive])
+  @@map("issue_templates")
+}
+
+// ═══════════════════════════════════════════════════════════
+// 고객사 이슈리스트 임포트 (FR-907 · docs/피드백 FB-009)
+//
+// 고객사가 자기 양식으로 낸 엑셀을 그대로 담는 자리다.
+// **우리 이슈로 매핑하지 않는다** — 컬럼이 다른 채로 두고, 무엇을 어떤 순서로
+// 보여줄지만 사람이 정한다.
+//
+// ★ 왜 issues 에 안 넣나.
+//   고객사 파일의 `이슈현황` 은 `수정확인완료`·`배포대기`·`고객사 확인 필요` 처럼
+//   우리 상태 9종과 아예 다른 체계다. 억지로 맞추면 **틀린 값을 만들어 낸다.**
+//   여기 규칙 그대로다 — *"없는 걸 지어내지 않는다"* (issues.roundId 주석).
+// ═══════════════════════════════════════════════════════════
+
+/// 임포트한 엑셀 한 장 = 목록 하나.
+model ImportedList {
+  id          Int      @id @default(autoincrement())
+  projectId   Int      @map("project_id")
+  /// 사람이 붙이는 이름. "고객사 A · 8월 이슈"
+  name        String   @db.VarChar(120)
+  /// 원본 파일명. 어느 파일에서 왔는지 되짚을 수 있어야 한다
+  sourceFile  String   @map("source_file") @db.VarChar(255)
+  /// 어느 시트였나. 실파일은 시트가 17개짜리도 있었다
+  sheetName   String   @map("sheet_name") @db.VarChar(200)
+  /// 헤더로 삼은 행 (1-based). ★ 1행이라고 박을 수 없다 — 실파일에서 3·4·6행이 흔했다
+  headerRow   Int      @map("header_row")
+  /// 데이터가 시작하는 행 (1-based).
+  /// ★ 헤더 다음 행이 아닐 수 있다. 고객사 파일은 2행이 `예시` 행이었다.
+  dataRow     Int      @map("data_row")
+  rowCount    Int      @map("row_count")
+  note        String?  @db.Text
+  createdById Int      @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  /// ★ *"전부 이 값으로"* 로 고른 기본값들 — `{"priority":"MAJOR","environment":"STAGE"}`.
+  ///
+  /// ⚠️ **왜 `imported_columns` 가 아니라 여기인가.** 기본값은 **열이 없을 때** 쓰는
+  ///   값이다. 열이 없으니 `imported_columns` 에 담을 행 자체가 없다.
+  /// ⚠️ 한때 `note` 에 JSON 으로 넣었다 (2026-09-16 당일). `note` 는 **사람이 적는
+  ///   메모 칸**이라, 화면에 메모를 여는 날 설정과 메모가 서로를 덮어쓴다. 바로 옮겼다.
+  defaults Json?
+
+  /// ★ 이슈를 **어느 프로젝트의 어느 차수로** 넣을 것인가 (2026-09-16 · 이슈 대량등록).
+  ///   올린 프로젝트(projectId)와 달라도 된다 — 파일은 여기서 열었지만
+  ///   이슈는 저기로 들어가는 일이 실제로 있다.
+  targetProjectId Int? @map("target_project_id")
+  targetRoundId   Int? @map("target_round_id")
+
+  /// 이미 이슈를 만들었다는 표시. 두 번 눌러 수백 건이 두 벌 생기는 것을 막는다.
+  /// ★ 이것만으로는 부족하다 — 행 단위 멱등은 imported_rows.issue_id 가 맡는다.
+  committedAt   DateTime? @map("committed_at")
+  committedById Int?      @map("committed_by_id")
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("importedListCreator", fields: [createdById], references: [id])
+  columns   ImportedColumn[]
+  rows      ImportedRow[]
+
+  @@index([projectId])
+  @@map("imported_lists")
+}
+
+/// 원본 엑셀의 열 하나.
+///
+/// ★ **고른 열만 저장하지 않는다. 전부 저장하고 `isSelected` 로 감춘다.**
+///   "차출할 컬럼 선택"을 되돌릴 수 없는 결정으로 만들면, 잘못 고른 순간
+///   파일을 다시 올려야 한다. 원문을 지우지 않는 건 이 스키마의 일관된 태도다
+///   (issues.legacyScreenName 주석과 같은 논리).
+model ImportedColumn {
+  id           Int     @id @default(autoincrement())
+  listId       Int     @map("list_id")
+  /// 원본 열 번호 (0-based). **파일이 정한 값이라 절대 안 변한다.**
+  /// imported_rows.cells 의 키가 이것이다
+  sourceIndex  Int     @map("source_index")
+  /// 헤더 행에 적혀 있던 원문. 표시 이름을 고쳐도 이건 안 지운다
+  sourceHeader String  @map("source_header") @db.VarChar(255)
+  /// 화면·파일에 쓸 이름
+  label        String  @db.VarChar(255)
+  isSelected   Boolean @default(true) @map("is_selected")
+  /// ★ 이 열을 **이슈의 어느 칸**으로 넣을 것인가. "title"·"content"·"priority"…
+  ///   NULL 이면 이슈로 안 옮긴다 (보관만).
+  ///   ⚠️ enum 이 아니라 문자열이다 — 받을 칸이 늘 때마다 마이그레이션을 내고 싶지 않다.
+  targetField  String? @map("target_field") @db.VarChar(40)
+  /// 엑셀 값 → 마스터 코드. { "치명": "P1", "높음": "P2" }
+  /// ★ 고객사 엑셀의 표기가 우리 마스터 이름과 일치하는 일은 없다. 사람이 한 번 이어준다.
+  valueMap     Json?   @map("value_map")
+  /// ★ 화면 열 순서와 내보내기 열 순서를 **한 칸이 같이 정한다.**
+  ///   두 벌로 나누면 "화면과 파일의 순서가 다르다"가 된다
+  sortOrder    Int     @map("sort_order")
+
+  list ImportedList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, sourceIndex])
+  @@index([listId, sortOrder])
+  @@map("imported_columns")
+}
+
+/// 원본 엑셀의 행 하나.
+///
+/// ★ 셀을 테이블로 쪼개지 않는다. 240행 × 18열이면 4,320행이 되고 조회마다 피벗해야 한다.
+///   JSON 한 칸이면 **행 하나 = 레코드 하나**다. 이 스키마는 이미 Json 을 쓰고 있다
+///   (status_transitions.allowed_roles · issue_templates.platform_codes).
+model ImportedRow {
+  id     Int  @id @default(autoincrement())
+  listId Int  @map("list_id")
+  /// 원본 행 번호 (1-based). 파일을 열어 대조할 수 있게 남긴다
+  rowNo  Int  @map("row_no")
+  /// { "1": "값", "3": "값" } — 키는 source_index. 빈 칸은 아예 넣지 않는다
+  cells  Json
+
+  /// ★ 이 행이 만든 이슈. NULL 이면 아직 안 만들었다 → **다시 눌러도 멱등**하다.
+  issueId     Int?    @unique @map("issue_id")
+  /// 이 행만 실패한 이유. 한 행 때문에 240행을 통째로 되돌리지 않는다.
+  importError String? @map("import_error") @db.Text
+
+  list  ImportedList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  issue Issue?       @relation(fields: [issueId], references: [id], onDelete: SetNull)
+
+  @@unique([listId, rowNo])
+  @@map("imported_rows")
+}
+
+// ─────────────────────────────────────────────────────────────
+// 지라 연동 (2026-09-21 · docs/21 v2 · docs/22-답변)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 지라(Jira Cloud)로 이슈를 **보내기** 위한 설정. **프로젝트마다 하나** (docs/11 14절).
+ *
+ * ★★ **왜 `.env` 가 아니라 표인가.**
+ *   *"상태는 코드가 아니라 데이터다"* 와 같은 이유다. 지라 쪽 **이슈 타입 ID·커스텀 필드
+ *   ID 는 팀 관리형 프로젝트 전용 값**이라(`docs/22-답변` 2-3) 프로젝트마다 다르다.
+ *   환경변수에 박으면 두 번째 프로젝트를 붙이는 순간 **서버를 내려야** 고칠 수 있다.
+ *
+ * ⚠️⚠️ **토큰은 여기 두지 않는다.** 이메일·API 토큰은 `.env` 에만 있다
+ *   (`IT_JIRA_EMAIL` · `IT_JIRA_TOKEN`). DB 에 두면 **백업 파일과 화면에 비밀이 실린다** —
+ *   백업은 지금 같은 노트북의 `backups/` 에 평문으로 쌓인다(`docs/22` 4-3).
+ *   그래서 이 표에는 *"어디로 · 무엇으로 보내나"* 만 있고 *"누구로 보내나"* 는 없다.
+ */
+model JiraSetting {
+  id        Int @id @default(autoincrement())
+  projectId Int @unique @map("project_id")
+
+  /// 지라 사이트 주소 (`https://your-company.atlassian.net`). **끝의 `/` 는 떼어 저장한다** —
+  /// 안 떼면 `//browse/…` 가 되는데 지라는 그것도 받아줘서 **조용히 이상한 링크**가 된다.
+  baseUrl String @map("base_url") @db.VarChar(200)
+
+  /// 지라 쪽 프로젝트 키 (`WEB`).
+  /// ⚠️ 우리 `projects.key`(`SP`)와 **다른 값**이다. 같을 거라고 가정하지 않는다.
+  jiraProjectKey String @map("jira_project_key") @db.VarChar(20)
+
+  /// 만들 이슈 타입의 **ID** (`10355` = Bug).
+  /// ★ 이름(`Bug`)이 아니라 ID 로 둔다 — 지라에서 이름을 한글로 바꿔도 안 깨진다.
+  issueTypeId String @map("issue_type_id") @db.VarChar(20)
+
+  /// 붙일 라벨. 쉼표로 여럿 (`이슈`). 지라 라벨은 **공백을 못 넣는다** — 저장할 때 막는다.
+  labels String? @db.VarChar(200)
+
+  /// `Category` 처럼 **단일 선택 커스텀 필드** 하나. 필드 ID 와 고를 값을 함께 둔다.
+  /// 둘 중 하나가 비면 **안 보낸다** — 반쪽으로 보내면 지라가 400 을 준다.
+  categoryFieldId String? @map("category_field_id") @db.VarChar(40)
+  categoryValue   String? @map("category_value") @db.VarChar(100)
+
+  /// 기본 Epic 키 (`WEB-123`). 보내기 화면에서 **그 자리에서 고칠 수 있다** —
+  /// 차수마다 Epic 이 바뀌는데 그때마다 설정에 들어가게 하면 아무도 안 고친다.
+  defaultParentKey String? @map("default_parent_key") @db.VarChar(30)
+
+  /// 우선순위 짝짓기. `{"<우리 priority id>":"Highest"}` JSON 한 덩어리.
+  ///
+  /// ★ 왜 표가 아니라 JSON 인가. 짝은 **이 설정의 일부**이고 따로 조회·정렬할 일이 없다.
+  ///   표로 만들면 우선순위를 추가할 때 두 곳을 고쳐야 한다.
+  /// ⚠️ **이름이 아니라 id 를 키로 쓴다** — 우선순위 이름은 설정에서 바뀔 수 있다.
+  priorityMap String? @map("priority_map") @db.Text
+
+  /**
+   * 켜야 `지라로 보내기` 가 보인다. **기본은 꺼짐.**
+   *
+   * ★ 설정을 채우는 일과 동료에게 버튼을 보여주는 일을 **갈라 놓는다.**
+   *   반쯤 채운 설정으로 버튼이 떠 있으면 누군가 눌러 400 을 맞는다.
+   */
+  isActive Boolean @default(false) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("jira_settings")
+}
+
+/// ★ 쓰는 사람이 앱 안에서 보내는 의견 (2026-09-28 · 사이드바 «의견 보내기»).
+///
+/// 왜 따로 받나 — 이 프로젝트의 판단 기준은 *"제보에 없는 것은 만들지 않는다"* 다 (R2 의 결말).
+/// 그런데 제보가 들어올 **자리가 없었다.** 대화에서 들은 것을 `docs/피드백.md` 에 옮겨 적는 게 전부였다.
+///
+/// ★ **프로젝트에 매지 않는다** — 알림·계정처럼 프로젝트 밖이다. 어느 화면에서 보냈는지는 `page` 가 말한다.
+/// ★ 지우지 않는다. 관리자가 읽으면 `checkedAt` 만 찍는다 — 들은 것의 기록이 남아야 한다.
+model Feedback {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  body        String    @db.Text
+  /// 보낸 순간 보고 있던 화면의 주소(경로 + 쿼리). *"여기가 불편해요"* 의 «여기»
+  page        String?   @db.VarChar(500)
+  userAgent   String?   @map("user_agent") @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  /// 관리자가 읽었다고 표시한 시각. NULL 이면 아직 안 읽음
+  checkedAt   DateTime? @map("checked_at")
+  checkedById Int?      @map("checked_by_id")
+
+  user      User  @relation("feedbackAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  checkedBy User? @relation("feedbackChecker", fields: [checkedById], references: [id], onDelete: SetNull)
+
+  @@index([checkedAt])
+  @@map("feedbacks")
+}
